@@ -5,3 +5,4 @@ ruff~=0.7
 codespell~=2.3
 juju~=3.5
 pytest-operator~=0.38
+ops-scenario~=7.0

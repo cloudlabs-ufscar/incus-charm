@@ -50,13 +50,14 @@ bases:
 config:
   options:
     # An example config option to customise the log level of the workload
-    # log-level:
-    #   description: |
-    #     Configures the log level of gunicorn.
-    #
-    #     Acceptable values are: "info", "debug", "warning", "error" and "critical"
-    #   default: "info"
-    #   type: string
+    server_port:
+      description: |
+        Configures the port for the Incus API server.
+      default: 8443
+      type: int
+
+extra-bindings:
+  public:
 
 parts:
   charm:
