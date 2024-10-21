@@ -10,16 +10,9 @@ Use links instead.
 
 # incus
 
-Charmhub package name: operator-template
-More information: https://charmhub.io/incus
-
-Describe your charm in one or two sentences.
+The charm deploys an Incus cluster across all units. Integrations with external network and storage services such as Ceph and OVN is provided, as well as integrations with auth and monitoring services.
 
 ## Other resources
-
-<!-- If your charm is documented somewhere else other than Charmhub, provide a link separately. -->
-
-- [Read more](https://example.com)
 
 - [Contributing](CONTRIBUTING.md) <!-- or link to other contribution documentation -->
 
