@@ -53,3 +53,11 @@ config:
         Acceptable values are: "info", "debug", "warning", "error" and "critical"
       default: "info"
       type: string
+
+parts:
+  charm:
+    build-packages:
+      - build-essential
+      - libffi-dev
+      - libssl-dev
+      - python3-dev
