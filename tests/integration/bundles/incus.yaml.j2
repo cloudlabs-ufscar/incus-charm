@@ -1,0 +1,18 @@
+# This is an integration test bundle template. The bundle is meant to be deployed
+# on an LXD cloud capable of provisioning VMs.
+
+default-base: ubuntu@22.04/stable
+
+applications:
+  incus:
+    charm: {{ charm_incus }}
+    num_units: 1
+    to:
+      - 0
+    bindings:
+      "": alpha
+    constraints: arch=amd64
+
+machines:
+  0:
+    constraints: virt-type=virtual-machine
