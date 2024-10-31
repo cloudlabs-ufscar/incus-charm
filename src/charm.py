@@ -5,13 +5,14 @@
 """Charm the application."""
 
 import logging
-from typing import Optional
+from typing import List, Optional, Union
 
 import charms.data_platform_libs.v0.data_models as data_models
 import charms.operator_libs_linux.v0.apt as apt
 import ops
 import requests
 import yaml
+from pydantic import ValidationError, field_validator
 
 import incus
 
@@ -24,6 +25,39 @@ class IncusConfig(data_models.BaseConfigModel):
     server_port: int
 
 
+class AddTrustedCertificateActionParams(data_models.BaseConfigModel):
+    """Parameters for the add-trusted-certificate action."""
+
+    cert: str
+    name: Optional[str] = None
+    projects: Optional[List[str]] = None
+
+    @field_validator("projects", mode="before")
+    @classmethod
+    def split_projects(cls, value):
+        """Split a comma separated string of projects into a list."""
+        if isinstance(value, str):
+            return [project.strip() for project in value.split(",")]
+        return value
+
+    @field_validator("cert")
+    @classmethod
+    def validate_cert(cls, cert: str):
+        """Validate that `cert` is a valid PEM encoded x509 certificate."""
+        cert = cert.strip()
+        begin_mark = "-----BEGIN CERTIFICATE-----"
+        end_mark = "-----END CERTIFICATE-----"
+        if not cert.startswith(begin_mark) or not cert.endswith(end_mark):
+            raise ValueError("value is not a valid x509 certificate")
+
+        # NOTE: the certificate from the action parameters contains spaces
+        # instead of newlines, so we need to reconstruct the certificate in
+        # the appropriate format
+        return "\n".join(cert.replace(" CERTIFICATE-", "CERTIFICATE-").split()).replace(
+            "CERTIFICATE-", " CERTIFICATE-"
+        )
+
+
 class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
     """Charm the Incus application."""
 
@@ -32,10 +66,17 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
 
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
+
+        # Events
         framework.observe(self.on.collect_unit_status, self.on_collect_unit_status)
         framework.observe(self.on.install, self.on_install)
         framework.observe(self.on.config_changed, self.on_config_changed)
         framework.observe(self.on.start, self.on_start)
+
+        # Actions
+        framework.observe(
+            self.on.add_trusted_certificate_action, self.add_trusted_certificate_action
+        )
 
     def on_collect_unit_status(self, event: ops.CollectStatusEvent):
         """Handle collect unit status event."""
@@ -70,6 +111,33 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         self.unit.status = ops.MaintenanceStatus("Bootstrapping Incus")
         self._bootstrap_incus()
         self.unit.status = ops.ActiveStatus("Unit is ready")
+
+    @data_models.validate_params(AddTrustedCertificateActionParams)
+    def add_trusted_certificate_action(
+        self: ops.CharmBase,
+        event: ops.ActionEvent,
+        params: Union[AddTrustedCertificateActionParams, ValidationError],
+    ):
+        """Handle the add-trusted-certificate action."""
+        if isinstance(params, ValidationError):
+            return event.fail(str(params))
+        self.unit.status = ops.MaintenanceStatus("Adding trusted certificate")
+        logger.debug(
+            "Adding trusted certificate. cert=%s projects=%s name=%s",
+            params.cert,
+            params.projects,
+            params.name,
+        )
+        try:
+            incus.add_trusted_certificate(
+                cert=params.cert,
+                type="client",
+                projects=params.projects,
+                name=params.name,
+            )
+            event.set_results({"result": "Certificate added to Incus truststore"})
+        except incus.IncusProcessError as e:
+            event.fail(str(e))
 
     @property
     def _package_installed(self) -> bool:

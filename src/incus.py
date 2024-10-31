@@ -2,7 +2,8 @@
 
 import logging
 import subprocess
-from typing import Optional, Union
+from tempfile import NamedTemporaryFile
+from typing import List, Literal, Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,25 @@ class IncusProcessError(Exception):
 def set_config(key: str, value: Union[str, int]):
     """Set config `key` to `value` in the Incus daemon."""
     run_command("config", "set", key, str(value))
+
+
+def add_trusted_certificate(
+    cert: str,
+    type: Literal["client", "metrics"],
+    name: Optional[str] = None,
+    projects: Optional[List[str]] = None,
+):
+    """Add the PEM encoded `cert` to the Incus daemon truststore."""
+    with NamedTemporaryFile() as file:
+        args = ["config", "trust", "add-certificate", file.name, "--type", type]
+        if name:
+            args.extend(["--name", name])
+        if projects:
+            args.extend(["--projects", ",".join(projects)])
+
+        file.write(cert.strip().encode())
+        file.flush()
+        run_command(*args)
 
 
 def run_command(*args: str, input: Optional[str] = None):
@@ -37,4 +57,4 @@ def run_command(*args: str, input: Optional[str] = None):
             process.stdout,
             input,
         )
-        raise IncusProcessError
+        raise IncusProcessError(process.stderr.decode().strip())

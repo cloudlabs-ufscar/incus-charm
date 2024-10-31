@@ -56,6 +56,27 @@ config:
       default: 8443
       type: int
 
+actions:
+  add-trusted-certificate:
+    description: Add a trusted certificate to the Incus daemon.
+    params:
+      name:
+        description: The certificate name (optional)
+        type: string
+      projects:
+        description: A comma separated list of projects to restrict the client certificate to (optional)
+        type: string
+      cert:
+        description: |
+          The raw X.509 PEM client certificate.
+
+          The file can be passed as:
+          $ juju run incus/leader add-trusted-certificate cert="$(cat client.crt)"
+        type: string
+    required:
+      - cert
+    additionalProperties: false
+
 extra-bindings:
   public:
 

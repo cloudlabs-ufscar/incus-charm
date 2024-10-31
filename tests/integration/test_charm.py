@@ -5,6 +5,7 @@
 import asyncio
 import json
 import logging
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -69,7 +70,6 @@ async def test_workload_connectivity(ops_test: OpsTest):
 
         response = requests.get(f"https://{public_address}:8443", verify=False)
         assert response.ok
-
         content = json.loads(response.content)
         assert content["status"] == "Success"
         assert content["status_code"] == 200
@@ -77,14 +77,14 @@ async def test_workload_connectivity(ops_test: OpsTest):
 
 
 @pytest.mark.abort_on_fail
-async def test_change_port(ops_test: OpsTest):
+@pytest.mark.parametrize("port", (8888, 8443))
+async def test_change_port(ops_test: OpsTest, port: int):
     assert ops_test.model, "No model found"
 
     application = ops_test.model.applications[APP_NAME]
     assert application, "Application not found in model"
 
-    new_port = 8888
-    await application.set_config({"server_port": str(new_port)})
+    await application.set_config({"server_port": str(port)})
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME],
         status="active",
@@ -95,10 +95,60 @@ async def test_change_port(ops_test: OpsTest):
     for unit in application.units:
         public_address = await unit.get_public_address()
 
-        response = requests.get(f"https://{public_address}:{new_port}", verify=False)
+        response = requests.get(f"https://{public_address}:{port}", verify=False)
         assert response.ok
-
         content = json.loads(response.content)
         assert content["status"] == "Success"
         assert content["status_code"] == 200
         assert content["error_code"] == 0
+
+
+@pytest.mark.abort_on_fail
+async def test_add_trusted_certificate(ops_test: OpsTest, tmp_path: Path):
+    assert ops_test.model, "No model found"
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+    unit = application.units[0]
+    public_address = await unit.get_public_address()
+
+    # Create the certificate and key
+    key_path = str((tmp_path / "incus.key").absolute())
+    cert_path = str((tmp_path / "incus.crt").absolute())
+    process = subprocess.run(
+        f"openssl req -x509 -newkey rsa:2048 -keyout {key_path} -nodes -out {cert_path} -subj /CN=incus.local".split()
+    )
+    assert (
+        process.returncode == 0
+    ), f"Failed to create certificate. returncode={process.returncode} stdout={process.stdout} stderr={process.stderr}"
+
+    # The certificate is not trusted
+    response = requests.get(
+        f"https://{public_address}:8443/1.0", verify=False, cert=(cert_path, key_path)
+    )
+    assert response.ok
+    content = json.loads(response.content)
+    assert content["status"] == "Success"
+    assert content["status_code"] == 200
+    assert content["error_code"] == 0
+    assert content["metadata"]["auth"] == "untrusted"
+
+    # Add the trusted certificate
+    action = await unit.run_action(
+        "add-trusted-certificate",
+        cert=Path(cert_path).read_text(),
+        name="test-certificate",
+    )
+    await action.fetch_output()
+    assert action.status == "completed", f"Action not completed: {action.results}"
+
+    # The certificate is now trusted
+    response = requests.get(
+        f"https://{public_address}:8443/1.0", verify=False, cert=(cert_path, key_path)
+    )
+    assert response.ok
+    content = json.loads(response.content)
+    assert content["status"] == "Success"
+    assert content["status_code"] == 200
+    assert content["error_code"] == 0
+    assert content["metadata"]["auth"] == "trusted"
