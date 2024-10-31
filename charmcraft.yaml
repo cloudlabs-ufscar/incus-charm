@@ -66,3 +66,8 @@ parts:
       - libffi-dev
       - libssl-dev
       - python3-dev
+    build-snaps:
+      - rustup
+    override-build: |
+      rustup default stable
+      craftctl default
