@@ -46,6 +46,15 @@ jobs:
         uses: actions/checkout@v4
       - name: Run unit tests
         run: uvx tox run -e unit
+  static:
+    name: Static type check charm
+    runs-on: ubuntu
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run static type checking
+        run: uvx tox run -e static
   build:
     name: Build charm
     runs-on: ubuntu
