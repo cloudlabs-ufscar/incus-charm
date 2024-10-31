@@ -58,7 +58,7 @@ jobs:
   build:
     name: Build charm
     runs-on: ubuntu
-    timeout-minutes: 10
+    timeout-minutes: 20
     needs: [lint, unit]
     steps:
       - name: Checkout
