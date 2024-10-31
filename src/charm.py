@@ -7,6 +7,7 @@
 import logging
 from typing import Optional
 
+import charms.data_platform_libs.v0.data_models as data_models
 import charms.operator_libs_linux.v0.apt as apt
 import ops
 import requests
@@ -17,10 +18,17 @@ import incus
 logger = logging.getLogger(__name__)
 
 
-class IncusCharm(ops.CharmBase):
+class IncusConfig(data_models.BaseConfigModel):
+    """The Incus charm configuration."""
+
+    server_port: int
+
+
+class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
     """Charm the Incus application."""
 
     package_name = "incus"
+    config_type = IncusConfig
 
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
@@ -49,7 +57,7 @@ class IncusCharm(ops.CharmBase):
     def on_config_changed(self, event: ops.ConfigChangedEvent):
         """Handle config changed event."""
         self.unit.status = ops.MaintenanceStatus("Changing config")
-        port = int(self.config["server_port"])
+        port = self.config.server_port
         public_address = ""
         public_binding = self.model.get_binding("public")
         if public_binding and public_binding.network.bind_address:
