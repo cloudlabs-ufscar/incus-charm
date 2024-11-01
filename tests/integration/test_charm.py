@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 import requests
 import yaml
+from helpers import build_charm
 from jinja2 import Template
 from pytest_operator.plugin import OpsTest
 
@@ -33,7 +34,7 @@ async def test_build_and_deploy(ops_test: OpsTest, tmp_path: Path):
     assert ops_test.model, "No model found"
 
     # Build and deploy charm from local source folder
-    charm = await ops_test.build_charm(".")
+    charm = await build_charm(ops_test)
 
     # Render the test bundle with the built charm
     bundle_path = tmp_path / "bundle.yaml"

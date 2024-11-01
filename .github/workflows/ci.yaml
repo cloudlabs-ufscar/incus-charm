@@ -9,7 +9,6 @@ on:
       - 'LICENSE'
       - '**.md'
   pull_request:
-    branches: [main]
     paths-ignore:
       - '.gitignore'
       - '.jujuignore'
@@ -29,7 +28,7 @@ concurrency:
 
 jobs:
   lint:
-    name: Lint charm
+    name: Lint
     runs-on: ubuntu
     timeout-minutes: 5
     steps:
@@ -38,7 +37,7 @@ jobs:
       - name: Run linters
         run: uvx tox run -e lint
   unit:
-    name: Unit test charm
+    name: Unit test
     runs-on: ubuntu
     timeout-minutes: 5
     steps:
@@ -47,7 +46,7 @@ jobs:
       - name: Run unit tests
         run: uvx tox run -e unit
   static:
-    name: Static type check charm
+    name: Static type check
     runs-on: ubuntu
     timeout-minutes: 5
     steps:
@@ -56,10 +55,10 @@ jobs:
       - name: Run static type checking
         run: uvx tox run -e static
   build:
-    name: Build charm
+    name: Build
     runs-on: ubuntu
     timeout-minutes: 20
-    needs: [lint, unit]
+    needs: [lint, unit, static]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -84,3 +83,24 @@ jobs:
           path: |
             *.charm
           if-no-files-found: error
+
+  integration:
+    name: Integration test
+    runs-on: ubuntu
+    timeout-minutes: 60
+    needs: [build]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: lxd
+          bootstrap-constraints: cores=2 mem=4G virt-type=virtual-machine
+      - name: Download charm package
+        uses: actions/download-artifact@v4
+        with:
+          name: charm-incus-${{ github.run_id }}
+          path: charm
+      - name: Run integration tests
+        run: uvx tox run -e integration
