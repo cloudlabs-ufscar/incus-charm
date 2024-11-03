@@ -117,7 +117,8 @@ async def test_add_trusted_certificate(ops_test: OpsTest, tmp_path: Path):
     key_path = str((tmp_path / "incus.key").absolute())
     cert_path = str((tmp_path / "incus.crt").absolute())
     process = subprocess.run(
-        f"openssl req -x509 -newkey rsa:2048 -keyout {key_path} -nodes -out {cert_path} -subj /CN=incus.local".split()
+        f"openssl req -x509 -newkey rsa:2048 -keyout {key_path} -nodes -out {cert_path} -subj /CN=incus.local".split(),
+        capture_output=True,
     )
     assert (
         process.returncode == 0
