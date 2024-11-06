@@ -12,7 +12,7 @@ import charms.operator_libs_linux.v0.apt as apt
 import ops
 import requests
 import yaml
-from pydantic import ValidationError, field_validator
+from pydantic import ValidationError, validator
 
 import incus
 
@@ -32,7 +32,7 @@ class AddTrustedCertificateActionParams(data_models.BaseConfigModel):
     name: Optional[str] = None
     projects: Optional[List[str]] = None
 
-    @field_validator("projects", mode="before")
+    @validator("projects", pre=True)
     @classmethod
     def split_projects(cls, value):
         """Split a comma separated string of projects into a list."""
@@ -40,7 +40,7 @@ class AddTrustedCertificateActionParams(data_models.BaseConfigModel):
             return [project.strip() for project in value.split(",")]
         return value
 
-    @field_validator("cert")
+    @validator("cert")
     @classmethod
     def validate_cert(cls, cert: str):
         """Validate that `cert` is a valid PEM encoded x509 certificate."""
