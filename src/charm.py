@@ -4,14 +4,15 @@
 
 """Charm the application."""
 
+import json
 import logging
-from typing import List, Optional, Union
+import socket
+from typing import Dict, List, Optional, Union, cast
 
 import charms.data_platform_libs.v0.data_models as data_models
 import charms.operator_libs_linux.v0.apt as apt
 import ops
 import requests
-import yaml
 from pydantic import ValidationError, validator
 
 import incus
@@ -19,10 +20,32 @@ import incus
 logger = logging.getLogger(__name__)
 
 
+class ClusterAppData(data_models.BaseConfigModel):
+    """The application data in the cluster relation."""
+
+    tokens: Dict[str, str]
+
+
+class ClusterUnitData(data_models.BaseConfigModel):
+    """The unit data in the cluster relation."""
+
+    node_name: str
+
+
 class IncusConfig(data_models.BaseConfigModel):
     """The Incus charm configuration."""
 
     server_port: int
+    cluster_port: int
+
+    @validator("server_port", "cluster_port")
+    @classmethod
+    def validate_port(cls, port: int) -> int:
+        """Validate that the given `port` is within a valid range."""
+        max_port_number = 65535
+        if not (0 <= port <= max_port_number):
+            raise ValueError("A port value should be an integer between 0 and 65535")
+        return port
 
 
 class AddTrustedCertificateActionParams(data_models.BaseConfigModel):
@@ -72,6 +95,8 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         framework.observe(self.on.install, self.on_install)
         framework.observe(self.on.config_changed, self.on_config_changed)
         framework.observe(self.on.start, self.on_start)
+        framework.observe(self.on.cluster_relation_created, self.on_cluster_relation_created)
+        framework.observe(self.on.cluster_relation_changed, self.on_cluster_relation_changed)
 
         # Actions
         framework.observe(
@@ -82,7 +107,14 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         """Handle collect unit status event."""
         if not self._package_installed:
             event.add_status(ops.BlockedStatus(f"Package '{self.package_name}' not installed"))
-        event.add_status(ops.ActiveStatus("Unit is ready"))
+
+        if not self.unit.is_leader() and not incus.is_clustered():
+            event.add_status(ops.WaitingStatus("Waiting for cluster token"))
+
+        if incus.is_clustered():
+            event.add_status(ops.ActiveStatus("Unit is ready and clustered"))
+        else:
+            event.add_status(ops.ActiveStatus("Unit is ready"))
 
     def on_install(self, event: ops.InstallEvent):
         """Handle install event."""
@@ -98,19 +130,90 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
     def on_config_changed(self, event: ops.ConfigChangedEvent):
         """Handle config changed event."""
         self.unit.status = ops.MaintenanceStatus("Changing config")
-        port = self.config.server_port
+
         public_address = ""
+        server_port = self.config.server_port
         public_binding = self.model.get_binding("public")
         if public_binding and public_binding.network.bind_address:
             public_address = str(public_binding.network.bind_address)
-        incus.set_config("core.https_address", f"{public_address}:{port}")
-        self.unit.set_ports(ops.Port("tcp", port))
+        incus.set_config("core.https_address", f"{public_address}:{server_port}")
+        self.unit.set_ports(ops.Port("tcp", server_port))
+
+        incus.set_config("cluster.https_address", self._cluster_address)
 
     def on_start(self, event: ops.StartEvent):
         """Handle start event."""
-        self.unit.status = ops.MaintenanceStatus("Bootstrapping Incus")
-        self._bootstrap_incus()
-        self.unit.status = ops.ActiveStatus("Unit is ready")
+        if self.unit.is_leader():
+            self._bootstrap_incus()
+
+    def on_cluster_relation_created(self, event: ops.RelationCreatedEvent):
+        """Handle cluster relation created event."""
+        event.relation.data[self.unit]["node-name"] = self._node_name
+        if self.unit.is_leader():
+            event.relation.data[event.app]["tokens"] = json.dumps({})
+
+    @data_models.parse_relation_data(app_model=ClusterAppData, unit_model=ClusterUnitData)
+    def on_cluster_relation_changed(
+        self: ops.CharmBase,
+        event: ops.RelationEvent,
+        app_data: Optional[Union[ClusterAppData, ValidationError]] = None,
+        unit_data: Optional[Union[ClusterUnitData, ValidationError]] = None,
+    ):
+        """Handle cluster relation changed event."""
+        # HACK: the typings for the `data_models` library are a bit broken, so we have
+        # to declare `self` as `ops.CharmBase` and then cast it back to `IncusCharm`.
+        self = cast(IncusCharm, self)
+        if unit_data is None:
+            logger.warning("No unit data available. event=%s", event)
+            return
+        if app_data is None:
+            logger.warning("No app data available. event=%s", event)
+            return
+        if isinstance(unit_data, ValidationError):
+            logger.warning(
+                "Invalid unit data. event=%s validation_error=%s", event, str(unit_data)
+            )
+            return
+        if isinstance(app_data, ValidationError):
+            logger.warning("Invalid app data. event=%s validation_error=%s", event, str(app_data))
+            return
+
+        if self.unit.is_leader():
+            if not incus.is_clustered():
+                self.unit.status = ops.MaintenanceStatus("Enabling clustering")
+                logger.info("Node has not enabled clustering. Will enable it.")
+                incus.enable_clustering(self._node_name)
+
+            node_name = unit_data.node_name
+            self.unit.status = ops.MaintenanceStatus(f"Creating join token for {node_name}")
+            logger.info(
+                "Creating join token for unit. unit=%s node_name=%s",
+                event.unit,
+                node_name,
+            )
+            join_token = incus.create_join_token(node_name)
+            app_data.tokens[node_name] = join_token
+            event.relation.data[event.app]["tokens"] = json.dumps(app_data.tokens)
+            logger.info("Join token created.")
+        else:
+            if incus.is_clustered():
+                return
+            node_name = self._node_name
+            logger.debug(
+                "Checking if join token is available in application data. node_name=%s app_data=%s",
+                node_name,
+                app_data,
+            )
+            token = app_data.tokens.get(node_name)
+            if not token:
+                logger.debug("Token not found in app data.")
+                return
+
+            logger.debug(
+                "Token found in app data. Will join the cluster. token=%s",
+                token,
+            )
+            self._bootstrap_incus(token)
 
     @data_models.validate_params(AddTrustedCertificateActionParams)
     def add_trusted_certificate_action(
@@ -138,6 +241,19 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             event.set_results({"result": "Certificate added to Incus truststore"})
         except incus.IncusProcessError as e:
             event.fail(str(e))
+
+    @property
+    def _cluster_address(self) -> str:
+        cluster_address = ""
+        cluster_port = self.config.cluster_port
+        cluster_binding = self.model.get_binding("cluster")
+        if cluster_binding and cluster_binding.network.bind_address:
+            cluster_address = str(cluster_binding.network.bind_address)
+        return f"{cluster_address}:{cluster_port}"
+
+    @property
+    def _node_name(self) -> str:
+        return socket.gethostname()
 
     @property
     def _package_installed(self) -> bool:
@@ -205,10 +321,22 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             gpg_key_url,
         )
 
-    def _bootstrap_incus(self):
-        """Bootstraps the Incus server via `incus admin init`."""
-        logger.info("Bootstrapping Incus")
+    def _bootstrap_incus(self, join_token: Optional[str] = None):
+        """Bootstraps the Incus server via `incus admin init`.
 
+        If `join_token` is provided, joins an existing cluster.
+        """
+        self.unit.status = ops.MaintenanceStatus("Bootstrapping Incus")
+        logger.info("Bootstrapping Incus")
+        cluster_info = (
+            None
+            if join_token is None
+            else {
+                "enabled": True,
+                "cluster_token": join_token,
+                "server_address": self._cluster_address,
+            }
+        )
         preseed = {
             # TODO: make the creation of networks configurable
             "networks": [
@@ -252,9 +380,9 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 },
             ],
             "projects": [],
-            "cluster": None,
+            "cluster": cluster_info,
         }
-        incus.run_command("admin", "init", "--preseed", input=yaml.dump(preseed))
+        incus.bootstrap_node(preseed)
         logger.info("Incus server bootstrapped")
 
 

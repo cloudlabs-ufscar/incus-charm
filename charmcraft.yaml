@@ -52,7 +52,12 @@ config:
     # An example config option to customise the log level of the workload
     server_port:
       description: |
-        Configures the port for the Incus API server.
+        The port for the Incus API server.
+      default: 8443
+      type: int
+    cluster_port:
+      description: |
+        The port for the Incus cluster communication.
       default: 8443
       type: int
 
@@ -79,6 +84,10 @@ actions:
 
 extra-bindings:
   public:
+
+peers:
+  cluster:
+    interface: incus-cluster
 
 parts:
   charm:
