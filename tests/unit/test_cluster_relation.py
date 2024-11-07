@@ -81,6 +81,7 @@ def test_cluster_relation_changed_leader_clustered():
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.enable_clustering") as enable_clustering,
         patch("charm.incus.create_join_token", return_value="any-join-token") as create_join_token,
+        patch("charm.incus.get_cluster_member_info"),
     ):
         ctx = scenario.Context(IncusCharm)
         relation = scenario.PeerRelation(
@@ -112,6 +113,7 @@ def test_cluster_relation_changed_leader_existing_tokens():
         patch(
             "charm.incus.create_join_token", return_value="any-new-join-token"
         ) as create_join_token,
+        patch("charm.incus.get_cluster_member_info"),
     ):
         ctx = scenario.Context(IncusCharm)
         relation = scenario.PeerRelation(
@@ -190,6 +192,7 @@ def test_cluster_relation_changed_non_leader_clustered():
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.get_cluster_member_info"),
     ):
         ctx = scenario.Context(IncusCharm)
         relation = scenario.PeerRelation(

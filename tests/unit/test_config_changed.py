@@ -19,6 +19,7 @@ def test_config_changed(server_port, cluster_port):
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.set_config") as set_config,
         patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.get_cluster_member_info"),
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(
@@ -54,6 +55,7 @@ def test_config_changed_invalid_port(server_port, cluster_port):
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.set_config") as set_config,
         patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.get_cluster_member_info"),
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(

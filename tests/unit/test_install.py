@@ -22,6 +22,7 @@ def test_install(leader, is_clustered):
         patch("charm.IncusCharm._install_package") as install_package,
         patch("charm.IncusCharm._package_version", "any-version"),
         patch("charm.incus.is_clustered", return_value=is_clustered),
+        patch("charm.incus.get_cluster_member_info"),
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(leader=leader)

@@ -20,6 +20,7 @@ def test_start_leader(is_clustered):
         patch("charm.IncusCharm._install_package"),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=is_clustered),
+        patch("charm.incus.get_cluster_member_info"),
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(leader=True)
@@ -36,6 +37,7 @@ def test_start_non_leader():
         patch("charm.IncusCharm._install_package"),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.incus.get_cluster_member_info"),
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(leader=False)

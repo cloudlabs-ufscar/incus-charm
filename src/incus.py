@@ -3,12 +3,30 @@
 import json
 import logging
 import subprocess
+from enum import Enum
 from tempfile import NamedTemporaryFile
 from typing import List, Literal, Optional, Union
 
 import yaml
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+
+class ClusterMemberStatus(str, Enum):
+    """Possible statuses for a cluster member."""
+
+    ONLINE = "Online"
+    EVACUATED = "Evacuated"
+    OFFLINE = "Offline"
+    BLOCKED = "Blocked"
+
+
+class ClusterMemberInfo(BaseModel, extra="ignore"):
+    """Information about the state of a cluster member."""
+
+    status: ClusterMemberStatus
+    message: str
 
 
 class IncusProcessError(Exception):
@@ -27,6 +45,13 @@ def is_clustered() -> bool:
     output = run_command("query", "/1.0/cluster")
     cluster_data = json.loads(output)
     return cluster_data["enabled"]
+
+
+def get_cluster_member_info(node_name: str) -> ClusterMemberInfo:
+    """Get information for the member identified by `node_name` in the Incus cluster."""
+    output = run_command("query", f"/1.0/cluster/members/{node_name}")
+    member_data = json.loads(output)
+    return ClusterMemberInfo(**member_data)
 
 
 def enable_clustering(member_name: str):

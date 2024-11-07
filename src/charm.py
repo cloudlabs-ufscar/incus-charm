@@ -108,14 +108,24 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         """Handle collect unit status event."""
         if not self._package_installed:
             event.add_status(ops.BlockedStatus(f"Package '{self.package_name}' not installed"))
+            return
 
-        if not self.unit.is_leader() and not incus.is_clustered():
+        is_clustered = incus.is_clustered()
+        if not self.unit.is_leader() and not is_clustered:
             event.add_status(ops.WaitingStatus("Waiting for cluster token"))
-
-        if incus.is_clustered():
-            event.add_status(ops.ActiveStatus("Unit is ready and clustered"))
-        else:
+            return
+        if not is_clustered:
             event.add_status(ops.ActiveStatus("Unit is ready"))
+            return
+
+        info = incus.get_cluster_member_info(self._node_name)
+        if info.status == incus.ClusterMemberStatus.EVACUATED:
+            event.add_status(ops.MaintenanceStatus(f"Evacuated: {info.message}"))
+            return
+        if info.status == incus.ClusterMemberStatus.ONLINE:
+            event.add_status(ops.ActiveStatus(f"Online: {info.message}"))
+            return
+        event.add_status(ops.BlockedStatus(f"{info.status.value}: {info.message}"))
 
     def on_install(self, event: ops.InstallEvent):
         """Handle install event."""

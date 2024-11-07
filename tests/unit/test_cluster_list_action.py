@@ -21,6 +21,7 @@ def test_incus_error():
             "charm.incus.cluster_list",
             side_effect=IncusProcessError("any-incus-error"),
         ) as cluster_list,
+        patch("charm.incus.get_cluster_member_info"),
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State()
@@ -40,6 +41,7 @@ def test_unit_not_in_cluster():
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.cluster_list") as cluster_list,
+        patch("charm.incus.get_cluster_member_info"),
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State()
@@ -59,6 +61,7 @@ def test_success():
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.cluster_list", return_value="any-cluster-list-result") as cluster_list,
+        patch("charm.incus.get_cluster_member_info"),
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State()
