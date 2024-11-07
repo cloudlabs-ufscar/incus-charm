@@ -81,6 +81,9 @@ actions:
     required:
       - cert
     additionalProperties: false
+  cluster-list:
+    description: List all cluster members and their state. Equivalent to the `incus cluster list` command.
+    additionalProperties: false
 
 extra-bindings:
   public:

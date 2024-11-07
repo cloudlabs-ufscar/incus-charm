@@ -102,6 +102,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         framework.observe(
             self.on.add_trusted_certificate_action, self.add_trusted_certificate_action
         )
+        framework.observe(self.on.cluster_list_action, self.cluster_list_action)
 
     def on_collect_unit_status(self, event: ops.CollectStatusEvent):
         """Handle collect unit status event."""
@@ -239,6 +240,18 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 name=params.name,
             )
             event.set_results({"result": "Certificate added to Incus truststore"})
+        except incus.IncusProcessError as e:
+            event.fail(str(e))
+
+    def cluster_list_action(self, event: ops.ActionEvent):
+        """Handle the cluster-list action."""
+        try:
+            if not incus.is_clustered():
+                event.fail("Unit is not clustered")
+                return
+
+            result = incus.cluster_list()
+            event.set_results({"result": result})
         except incus.IncusProcessError as e:
             event.fail(str(e))
 

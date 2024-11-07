@@ -43,6 +43,11 @@ def create_join_token(member_name: str) -> str:
     return token
 
 
+def cluster_list() -> str:
+    """List all cluster members and their state."""
+    return run_command("cluster", "list")
+
+
 def bootstrap_node(preseed: dict):
     """Bootstrap the Incus node with the given `preseed` data."""
     run_command("admin", "init", "--preseed", input=yaml.dump(preseed))
