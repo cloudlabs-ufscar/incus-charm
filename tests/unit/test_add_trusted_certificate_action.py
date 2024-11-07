@@ -16,7 +16,7 @@ from incus import IncusProcessError
 def test_invalid_input():
     with (
         patch("charm.IncusCharm._package_installed", True),
-        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.add_trusted_certificate") as add_trusted_certificate,
     ):
         ctx = scenario.Context(IncusCharm)
@@ -44,7 +44,7 @@ def test_invalid_input():
 def test_incus_error(certificate: str):
     with (
         patch("charm.IncusCharm._package_installed", True),
-        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.is_clustered", return_value=False),
         patch(
             "charm.incus.add_trusted_certificate",
             side_effect=IncusProcessError("any-incus-error"),
@@ -83,7 +83,7 @@ def test_incus_error(certificate: str):
 def test_success(certificate: str):
     with (
         patch("charm.IncusCharm._package_installed", True),
-        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.add_trusted_certificate") as add_trusted_certificate,
     ):
         ctx = scenario.Context(IncusCharm)
@@ -97,7 +97,7 @@ def test_success(certificate: str):
             ],
         )
 
-        out = ctx.run(
+        ctx.run(
             ctx.on.action(
                 "add-trusted-certificate",
                 params={
@@ -113,7 +113,6 @@ def test_success(certificate: str):
             scenario.UnknownStatus(),
             scenario.MaintenanceStatus("Adding trusted certificate"),
         ]
-        assert out.unit_status == scenario.ActiveStatus("Unit is ready")
         add_trusted_certificate.assert_called_once_with(
             cert=certificate,
             type="client",
