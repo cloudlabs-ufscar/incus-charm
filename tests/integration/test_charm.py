@@ -60,15 +60,20 @@ async def test_build_and_deploy(ops_test: OpsTest, tmp_path: Path):
 
 @pytest.mark.abort_on_fail
 async def test_workload_connectivity(ops_test: OpsTest):
+    """Test the workload connectivity.
+
+    All units should have an active status and be remotely accessible via
+    the HTTPS API.
+    """
     assert ops_test.model, "No model found"
 
     application = ops_test.model.applications[APP_NAME]
     assert application, "Application not found in model"
 
     for unit in application.units:
-        assert unit.workload_status_message == "Unit is ready"
-        public_address = await unit.get_public_address()
+        assert unit.workload_status_message == "Online: Fully operational"
 
+        public_address = await unit.get_public_address()
         response = requests.get(f"https://{public_address}:8443", verify=False)
         assert response.ok
         content = json.loads(response.content)
@@ -78,8 +83,43 @@ async def test_workload_connectivity(ops_test: OpsTest):
 
 
 @pytest.mark.abort_on_fail
+async def test_cluster_state(ops_test: OpsTest):
+    """Test the Incus cluster state.
+
+    All units should be part of the Incus cluster and have an operational status.
+    """
+    assert ops_test.model, "No model found"
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+
+    unit = application.units[0]
+    action = await unit.run_action("cluster-list", format="yaml")
+    await action.fetch_output()
+    assert action.status == "completed", f"Action not completed: {action.results}"
+
+    assert "result" in action.results
+    result = yaml.safe_load(action.results.get("result"))
+
+    assert len(result) == len(application.units), "Not all units are part of the Incus cluster."
+    machines = [
+        ops_test.model.machines[machine] for machine in await ops_test.model.get_machines()
+    ]
+    machine_hostnames = [machine.hostname for machine in machines]
+    for member in result:
+        assert member["server_name"] in machine_hostnames
+        assert member["status"] == "Online"
+        assert member["message"] == "Fully operational"
+        assert member["failure_domain"] == "default"
+
+
+@pytest.mark.abort_on_fail
 @pytest.mark.parametrize("port", (8888, 8443))
 async def test_change_port(ops_test: OpsTest, port: int):
+    """Test changing the server port via a config option.
+
+    All Incus servers should be updated and accessible on the new port.
+    """
     assert ops_test.model, "No model found"
 
     application = ops_test.model.applications[APP_NAME]
@@ -95,7 +135,6 @@ async def test_change_port(ops_test: OpsTest, port: int):
 
     for unit in application.units:
         public_address = await unit.get_public_address()
-
         response = requests.get(f"https://{public_address}:{port}", verify=False)
         assert response.ok
         content = json.loads(response.content)
@@ -106,12 +145,14 @@ async def test_change_port(ops_test: OpsTest, port: int):
 
 @pytest.mark.abort_on_fail
 async def test_add_trusted_certificate(ops_test: OpsTest, tmp_path: Path):
+    """Test adding a trusted certificate via the add-trusted-certificate action.
+
+    The certificate should be added and trusted to all Incus servers.
+    """
     assert ops_test.model, "No model found"
 
     application = ops_test.model.applications[APP_NAME]
     assert application, "Application not found in model"
-    unit = application.units[0]
-    public_address = await unit.get_public_address()
 
     # Create the certificate and key
     key_path = str((tmp_path / "incus.key").absolute())
@@ -125,17 +166,20 @@ async def test_add_trusted_certificate(ops_test: OpsTest, tmp_path: Path):
     ), f"Failed to create certificate. returncode={process.returncode} stdout={process.stdout} stderr={process.stderr}"
 
     # The certificate is not trusted
-    response = requests.get(
-        f"https://{public_address}:8443/1.0", verify=False, cert=(cert_path, key_path)
-    )
-    assert response.ok
-    content = json.loads(response.content)
-    assert content["status"] == "Success"
-    assert content["status_code"] == 200
-    assert content["error_code"] == 0
-    assert content["metadata"]["auth"] == "untrusted"
+    for unit in application.units:
+        public_address = await unit.get_public_address()
+        response = requests.get(
+            f"https://{public_address}:8443/1.0", verify=False, cert=(cert_path, key_path)
+        )
+        assert response.ok
+        content = json.loads(response.content)
+        assert content["status"] == "Success"
+        assert content["status_code"] == 200
+        assert content["error_code"] == 0
+        assert content["metadata"]["auth"] == "untrusted"
 
     # Add the trusted certificate
+    unit = application.units[0]
     action = await unit.run_action(
         "add-trusted-certificate",
         cert=Path(cert_path).read_text(),
@@ -145,12 +189,39 @@ async def test_add_trusted_certificate(ops_test: OpsTest, tmp_path: Path):
     assert action.status == "completed", f"Action not completed: {action.results}"
 
     # The certificate is now trusted
-    response = requests.get(
-        f"https://{public_address}:8443/1.0", verify=False, cert=(cert_path, key_path)
+    for unit in application.units:
+        public_address = await unit.get_public_address()
+        response = requests.get(
+            f"https://{public_address}:8443/1.0", verify=False, cert=(cert_path, key_path)
+        )
+        assert response.ok
+        content = json.loads(response.content)
+        assert content["status"] == "Success"
+        assert content["status_code"] == 200
+        assert content["error_code"] == 0
+        assert content["metadata"]["auth"] == "trusted"
+
+
+@pytest.mark.abort_on_fail
+async def test_add_unit(ops_test: OpsTest):
+    """Test adding a new unit to the application.
+
+    The new unit should join the existing Incus cluster and be remotely
+    accessible via the HTTPS API.
+    """
+    assert ops_test.model, "No model found"
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+
+    await ops_test.model.add_machine(constraints={"virt-type": "virtual-machine"})
+    await application.add_unit(to="3")
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME],
+        status="active",
+        raise_on_blocked=True,
+        timeout=DEPLOY_TIMEOUT,
     )
-    assert response.ok
-    content = json.loads(response.content)
-    assert content["status"] == "Success"
-    assert content["status_code"] == 200
-    assert content["error_code"] == 0
-    assert content["metadata"]["auth"] == "trusted"
+
+    await test_workload_connectivity(ops_test)
+    await test_cluster_state(ops_test)

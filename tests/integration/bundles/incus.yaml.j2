@@ -6,13 +6,19 @@ default-base: ubuntu@22.04/stable
 applications:
   incus:
     charm: {{ charm_incus }}
-    num_units: 1
+    num_units: 3
     to:
       - 0
+      - 1
+      - 2
     bindings:
       "": alpha
     constraints: arch=amd64
 
 machines:
   0:
+    constraints: virt-type=virtual-machine
+  1:
+    constraints: virt-type=virtual-machine
+  2:
     constraints: virt-type=virtual-machine
