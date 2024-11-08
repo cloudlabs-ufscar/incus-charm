@@ -183,22 +183,22 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         # HACK: the typings for the `data_models` library are a bit broken, so we have
         # to declare `self` as `ops.CharmBase` and then cast it back to `IncusCharm`.
         self = cast(IncusCharm, self)
-        if unit_data is None:
-            logger.warning("No unit data available. event=%s", event)
-            return
         if app_data is None:
             logger.warning("No app data available. event=%s", event)
-            return
-        if isinstance(unit_data, ValidationError):
-            logger.warning(
-                "Invalid unit data. event=%s validation_error=%s", event, str(unit_data)
-            )
             return
         if isinstance(app_data, ValidationError):
             logger.warning("Invalid app data. event=%s validation_error=%s", event, str(app_data))
             return
 
         if self.unit.is_leader():
+            if unit_data is None:
+                logger.warning("No unit data available. event=%s", event)
+                return
+            if isinstance(unit_data, ValidationError):
+                logger.warning(
+                    "Invalid unit data. event=%s validation_error=%s", event, str(unit_data)
+                )
+                return
             if not incus.is_clustered():
                 self.unit.status = ops.MaintenanceStatus("Enabling clustering")
                 logger.info("Node has not enabled clustering. Will enable it.")
