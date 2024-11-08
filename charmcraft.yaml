@@ -58,7 +58,12 @@ config:
     cluster_port:
       description: |
         The port for the Incus cluster communication.
-      default: 8443
+
+        Note that Incus does not support changing the cluster address after
+        the member joins the cluster. Because of this, any changes to this
+        option after the cluster is formed will be ignored on existing
+        units, but may be applied to new units.
+      default: 8444
       type: int
 
 actions:

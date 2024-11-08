@@ -150,7 +150,10 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         incus.set_config("core.https_address", f"{public_address}:{server_port}")
         self.unit.set_ports(ops.Port("tcp", server_port))
 
-        incus.set_config("cluster.https_address", self._cluster_address)
+        # NOTE: Incus does not support changing the cluster.https_address if the
+        # server is already part of a cluster.
+        if not incus.is_clustered():
+            incus.set_config("cluster.https_address", self._cluster_address)
 
     def on_start(self, event: ops.StartEvent):
         """Handle start event."""
