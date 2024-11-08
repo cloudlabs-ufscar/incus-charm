@@ -48,6 +48,12 @@ class IncusConfig(data_models.BaseConfigModel):
         return port
 
 
+class ClusterListActionParams(data_models.BaseConfigModel):
+    """Parameters for the cluster-list action."""
+
+    format: incus.CLIFormats
+
+
 class AddTrustedCertificateActionParams(data_models.BaseConfigModel):
     """Parameters for the add-trusted-certificate action."""
 
@@ -256,14 +262,21 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         except incus.IncusProcessError as e:
             event.fail(str(e))
 
-    def cluster_list_action(self, event: ops.ActionEvent):
+    @data_models.validate_params(ClusterListActionParams)
+    def cluster_list_action(
+        self: ops.CharmBase,
+        event: ops.ActionEvent,
+        params: Union[ClusterListActionParams, ValidationError],
+    ):
         """Handle the cluster-list action."""
         try:
             if not incus.is_clustered():
-                event.fail("Unit is not clustered")
-                return
+                return event.fail("Unit is not clustered")
 
-            result = incus.cluster_list()
+            if isinstance(params, ValidationError):
+                return event.fail(str(params))
+
+            result = incus.cluster_list(format=params.format)
             event.set_results({"result": result})
         except incus.IncusProcessError as e:
             event.fail(str(e))

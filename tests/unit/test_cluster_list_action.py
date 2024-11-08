@@ -13,6 +13,33 @@ from charm import IncusCharm
 from incus import IncusProcessError
 
 
+@pytest.mark.parametrize("format", ("", "any-invalid-format"))
+def test_invalid_input(format):
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.incus.is_clustered", return_value=True),
+        patch(
+            "charm.incus.cluster_list",
+            side_effect=IncusProcessError("any-incus-error"),
+        ) as cluster_list,
+        patch("charm.incus.get_cluster_member_info"),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State()
+
+        with pytest.raises(scenario.ActionFailed) as exc_info:
+            ctx.run(ctx.on.action("cluster-list", params={"format": format}), state)
+
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+        ]
+        cluster_list.assert_not_called()
+        assert (
+            "unexpected value; permitted: 'csv', 'json', 'table', 'yaml', 'compact'"
+            in exc_info.value.message
+        )
+
+
 def test_incus_error():
     with (
         patch("charm.IncusCharm._package_installed", True),
@@ -27,7 +54,7 @@ def test_incus_error():
         state = scenario.State()
 
         with pytest.raises(scenario.ActionFailed) as exc_info:
-            ctx.run(ctx.on.action("cluster-list"), state)
+            ctx.run(ctx.on.action("cluster-list", params={"format": "table"}), state)
 
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
@@ -47,7 +74,7 @@ def test_unit_not_in_cluster():
         state = scenario.State()
 
         with pytest.raises(scenario.ActionFailed) as exc_info:
-            ctx.run(ctx.on.action("cluster-list"), state)
+            ctx.run(ctx.on.action("cluster-list", params={"format": "table"}), state)
 
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
@@ -66,7 +93,7 @@ def test_success():
         ctx = scenario.Context(IncusCharm)
         state = scenario.State()
 
-        ctx.run(ctx.on.action("cluster-list"), state)
+        ctx.run(ctx.on.action("cluster-list", params={"format": "table"}), state)
 
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),

@@ -88,6 +88,12 @@ actions:
     additionalProperties: false
   cluster-list:
     description: List all cluster members and their state. Equivalent to the `incus cluster list` command.
+    params:
+      format:
+        description: |
+          The output format. Can be one of: csv, json, table, yaml, compact.
+        default: table
+        type: string
     additionalProperties: false
 
 extra-bindings:

@@ -13,6 +13,9 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 
+CLIFormats = Literal["csv", "json", "table", "yaml", "compact"]
+
+
 class ClusterMemberStatus(str, Enum):
     """Possible statuses for a cluster member."""
 
@@ -68,9 +71,9 @@ def create_join_token(member_name: str) -> str:
     return token
 
 
-def cluster_list() -> str:
+def cluster_list(format: CLIFormats) -> str:
     """List all cluster members and their state."""
-    return run_command("cluster", "list")
+    return run_command("cluster", "list", "--format", format)
 
 
 def bootstrap_node(preseed: dict):
