@@ -8,6 +8,7 @@ import logging
 import subprocess
 from pathlib import Path
 
+import juju.constraints as constraints
 import pytest
 import requests
 import yaml
@@ -214,7 +215,9 @@ async def test_add_unit(ops_test: OpsTest):
     application = ops_test.model.applications[APP_NAME]
     assert application, "Application not found in model"
 
-    await ops_test.model.add_machine(constraints={"virt-type": "virtual-machine"})
+    await ops_test.model.add_machine(
+        constraints=constraints.parse("virt-type=virtual-machine mem=2G")
+    )
     await application.add_unit(to="3")
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME],
