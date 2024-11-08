@@ -205,6 +205,10 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 incus.enable_clustering(self._node_name)
 
             node_name = unit_data.node_name
+            if node_name in app_data.tokens:
+                logger.debug("Token already generated for node. node_name=%s", node_name)
+                return
+
             self.unit.status = ops.MaintenanceStatus(f"Creating join token for {node_name}")
             logger.info(
                 "Creating join token for unit. unit=%s node_name=%s",
@@ -212,7 +216,9 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 node_name,
             )
             join_token = incus.create_join_token(node_name)
-            app_data.tokens[node_name] = join_token
+            secret = self.app.add_secret({"token": join_token}, label=f"{node_name}-join-token")
+            assert secret.id, f"Generated secret does not have a valid ID. secret={secret}"
+            app_data.tokens[node_name] = secret.id
             event.relation.data[event.app]["tokens"] = json.dumps(app_data.tokens)
             logger.info("Join token created.")
         else:
@@ -220,19 +226,23 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 return
             node_name = self._node_name
             logger.debug(
-                "Checking if join token is available in application data. node_name=%s app_data=%s",
+                "Checking if secret ID for join token is available in application data. node_name=%s app_data=%s",
                 node_name,
                 app_data,
             )
-            token = app_data.tokens.get(node_name)
-            if not token:
-                logger.debug("Token not found in app data.")
+            secret_id = app_data.tokens.get(node_name)
+            if not secret_id:
+                logger.debug("Secret ID not found in app data.")
                 return
 
-            logger.debug(
-                "Token found in app data. Will join the cluster. token=%s",
-                token,
+            logger.info(
+                "Secret ID found in app data. Will fetch token from it and join the cluster. secret_id=%s",
+                secret_id,
             )
+            secret = self.model.get_secret(id=secret_id)
+            logger.debug("Got secret with join token from model.")
+            token = secret.get_content().get("token")
+            assert token, "Join token secret has an invalid content."
             self._bootstrap_incus(token)
 
     @data_models.validate_params(AddTrustedCertificateActionParams)

@@ -41,6 +41,8 @@ bases:
     - name: ubuntu
       channel: "22.04"
 
+assumes:
+  - juju >= 3.5.0
 
 # (Optional) Configuration options for the charm
 # This config section defines charm config options, and populates the Configure

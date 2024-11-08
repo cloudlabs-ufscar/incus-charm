@@ -3,6 +3,7 @@
 #
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
+import json
 from unittest.mock import patch
 
 import scenario
@@ -66,7 +67,8 @@ def test_cluster_relation_changed_leader_not_clustered():
         enable_clustering.assert_called_once()
         create_join_token.assert_called_once_with("peer-node-name")
         relation = out.get_relation(relation.id)
-        assert relation.local_app_data["tokens"] == '{"peer-node-name": "any-join-token"}'
+        secret = out.get_secret(label="peer-node-name-join-token")
+        assert relation.local_app_data["tokens"] == json.dumps({"peer-node-name": secret.id})
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
             scenario.MaintenanceStatus("Enabling clustering"),
@@ -97,7 +99,8 @@ def test_cluster_relation_changed_leader_clustered():
         enable_clustering.assert_not_called()
         create_join_token.assert_called_once_with("peer-node-name")
         relation = out.get_relation(relation.id)
-        assert relation.local_app_data["tokens"] == '{"peer-node-name": "any-join-token"}'
+        secret = out.get_secret(label="peer-node-name-join-token")
+        assert relation.local_app_data["tokens"] == json.dumps({"peer-node-name": secret.id})
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
             scenario.MaintenanceStatus("Creating join token for peer-node-name"),
@@ -123,7 +126,7 @@ def test_cluster_relation_changed_leader_existing_tokens():
                 1: {"node-name": "peer-node-name"},
                 2: {"node-name": "new-peer-node-name"},
             },
-            local_app_data={"tokens": '{"peer-node-name": "any-join-token"}'},
+            local_app_data={"tokens": '{"peer-node-name": "any-join-token-secret-id"}'},
         )
         state = scenario.State(leader=True, relations={relation})
 
@@ -132,9 +135,12 @@ def test_cluster_relation_changed_leader_existing_tokens():
         enable_clustering.assert_not_called()
         create_join_token.assert_called_once_with("new-peer-node-name")
         relation = out.get_relation(relation.id)
-        assert (
-            relation.local_app_data["tokens"]
-            == '{"peer-node-name": "any-join-token", "new-peer-node-name": "any-new-join-token"}'
+        secret = out.get_secret(label="new-peer-node-name-join-token")
+        assert relation.local_app_data["tokens"] == json.dumps(
+            {
+                "peer-node-name": "any-join-token-secret-id",
+                "new-peer-node-name": secret.id,
+            }
         )
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
@@ -157,7 +163,7 @@ def test_cluster_relation_changed_non_leader_not_clustered():
                 0: {"node-name": "leader-node-name"},
                 1: {"node-name": "any-node-name"},
             },
-            local_app_data={"tokens": '{"any-node-name": "any-join-token"}'},
+            local_app_data={"tokens": '{"any-node-name": "any-join-token-secret-id"}'},
         )
         state = scenario.State(
             leader=False,
@@ -169,6 +175,11 @@ def test_cluster_relation_changed_non_leader_not_clustered():
                 )
             ],
             config={"cluster_port": 8888},
+            secrets={
+                scenario.Secret(
+                    id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
+                )
+            },
         )
 
         out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
@@ -202,7 +213,7 @@ def test_cluster_relation_changed_non_leader_clustered():
                 0: {"node-name": "leader-node-name"},
                 1: {"node-name": "any-node-name"},
             },
-            local_app_data={"tokens": '{"any-node-name": "any-join-token"}'},
+            local_app_data={"tokens": '{"any-node-name": "any-join-token-secret-id"}'},
         )
         state = scenario.State(leader=False, relations={relation})
 
