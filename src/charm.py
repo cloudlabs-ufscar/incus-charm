@@ -101,6 +101,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         framework.observe(self.on.install, self.on_install)
         framework.observe(self.on.config_changed, self.on_config_changed)
         framework.observe(self.on.start, self.on_start)
+        framework.observe(self.on.stop, self.on_stop)
         framework.observe(self.on.cluster_relation_created, self.on_cluster_relation_created)
         framework.observe(self.on.cluster_relation_changed, self.on_cluster_relation_changed)
 
@@ -165,6 +166,20 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         """Handle start event."""
         if self.unit.is_leader():
             self._bootstrap_incus()
+
+    def on_stop(self, event: ops.StopEvent):
+        """Handle stop event."""
+        if incus.is_clustered():
+            self.unit.status = ops.MaintenanceStatus("Evacuating node")
+            logger.info("Evacuating cluster member. node_name=%s", self._node_name)
+            incus.evacuate_node(self._node_name)
+
+            self.unit.status = ops.MaintenanceStatus("Leaving cluster")
+            logger.info("Leaving cluster. node_name=%s", self._node_name)
+            incus.remove_cluster_member(self._node_name)
+
+        self.unit.status = ops.MaintenanceStatus("Uninstalling packages")
+        self._uninstall_package()
 
     def on_cluster_relation_created(self, event: ops.RelationCreatedEvent):
         """Handle cluster relation created event."""
@@ -323,7 +338,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         return package_version
 
     def _install_package(self):
-        """Installs the `incus` package on the system."""
+        """Install the `incus` package on the system."""
         logging.info("Installing package. package_name=%s", self.package_name)
         try:
             apt.update()
@@ -340,6 +355,24 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         except apt.PackageError as e:
             logger.error(
                 "Error when installing package. package_name=%s error=%s",
+                self.package_name,
+                e,
+            )
+            raise e
+
+    def _uninstall_package(self):
+        """Uninstall the `incus` package on the system."""
+        logging.info("Uninstalling package. package_name=%s", self.package_name)
+        try:
+            apt.update()
+            package = apt.DebianPackage.from_system(self.package_name)
+            package.ensure(apt.PackageState.Absent)
+            logger.info("Uninstalled package. package_name=%s", self.package_name)
+        except apt.PackageNotFoundError:
+            logger.warning("Package not found in repositories. package_name=%s", self.package_name)
+        except apt.PackageError as e:
+            logger.error(
+                "Error when uninstalling package. package_name=%s error=%s",
                 self.package_name,
                 e,
             )

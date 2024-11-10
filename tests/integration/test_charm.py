@@ -23,6 +23,7 @@ DEPLOY_TIMEOUT = 10 * 60  # 10min
 OPERATION_TIMEOUT = 60  # 1min
 APP_NAME = METADATA["name"]
 BUNDLE_FILENAME = Path("tests/integration/bundles/incus.yaml.j2").absolute()
+TEST_INSTANCE_NAME = "test-instance"
 
 
 @pytest.mark.abort_on_fail
@@ -226,5 +227,78 @@ async def test_add_unit(ops_test: OpsTest):
         timeout=DEPLOY_TIMEOUT,
     )
 
+    await test_workload_connectivity(ops_test)
+    await test_cluster_state(ops_test)
+
+
+@pytest.mark.abort_on_fail
+async def test_create_instance(ops_test: OpsTest):
+    """Test the creation of an instance in the Incus cluster.
+
+    The instance should be successfully created and assigned to a cluster member.
+    """
+    assert ops_test.model, "No model found"
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+
+    # NOTE: we explicitly create the instance on the incus/3 unit because we'll
+    # remove it on the next test. This lets us more easily test the evacuation of
+    # departing units
+    unit = application.units[0]
+    target_node = ops_test.model.units["incus/3"].machine.hostname
+    action = await unit.run(
+        f"incus launch images:ubuntu/22.04 {TEST_INSTANCE_NAME} --vm --quiet --target {target_node}"
+    )
+    await action.fetch_output()
+    assert action.status == "completed", f"Action not completed: {action.results}"
+    assert action.results["return-code"] == 0, f"Action failed: {action.results['stderr']}"
+
+    # The new instance should have been created in the specified node
+    action = await unit.run("incus ls --format json")
+    await action.fetch_output()
+    assert action.status == "completed", f"Action not completed: {action.results}"
+    assert action.results["return-code"] == 0, f"Action failed: {action.results['stderr']}"
+    result = json.loads(action.results["stdout"])
+    assert len(result) == 1
+    assert result[0]["name"] == TEST_INSTANCE_NAME
+    assert result[0]["status"] == "Running"
+    assert result[0]["type"] == "virtual-machine"
+    assert result[0]["location"] == target_node
+
+
+@pytest.mark.abort_on_fail
+async def test_remove_unit(ops_test: OpsTest):
+    """Test removing an existing unit from the application.
+
+    The removed unit should be evacuated and leave the Incus cluster.
+    """
+    assert ops_test.model, "No model found"
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+
+    # Remove the unit
+    removed_node = ops_test.model.units["incus/3"].machine.hostname
+    await ops_test.model.destroy_unit("incus/3")
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME],
+        status="active",
+        timeout=DEPLOY_TIMEOUT,
+    )
+
+    # The existing instance should have migrated to another node
+    action = await application.units[0].run("incus ls --format json")
+    await action.fetch_output()
+    assert action.status == "completed", f"Action not completed: {action.results}"
+    assert action.results["return-code"] == 0, f"Action failed: {action.results['stderr']}"
+    result = json.loads(action.results["stdout"])
+    assert len(result) == 1
+    assert result[0]["name"] == TEST_INSTANCE_NAME
+    assert result[0]["status"] == "Running"
+    assert result[0]["type"] == "virtual-machine"
+    assert result[0]["location"] != removed_node
+
+    # The cluster should remain completely functional
     await test_workload_connectivity(ops_test)
     await test_cluster_state(ops_test)

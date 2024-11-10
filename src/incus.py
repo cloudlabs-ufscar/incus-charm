@@ -50,6 +50,16 @@ def is_clustered() -> bool:
     return cluster_data["enabled"]
 
 
+def evacuate_node(node_name: str):
+    """Evacuate the member identified by `node_name` in the Incus cluster."""
+    run_command("cluster", "evacuate", node_name, "--force")
+
+
+def remove_cluster_member(node_name: str):
+    """Remove the member identified by `node_name` from the Incus cluster."""
+    run_command("cluster", "remove", node_name)
+
+
 def get_cluster_member_info(node_name: str) -> ClusterMemberInfo:
     """Get information for the member identified by `node_name` in the Incus cluster."""
     output = run_command("query", f"/1.0/cluster/members/{node_name}")
