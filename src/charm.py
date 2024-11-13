@@ -164,7 +164,9 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
 
     def on_start(self, event: ops.StartEvent):
         """Handle start event."""
-        if self.unit.is_leader():
+        # NOTE: to handle restarts, we should ensure that we only try to
+        # bootstrap if the current node is not already part of a cluster
+        if self.unit.is_leader() and not incus.is_clustered():
             self._bootstrap_incus()
 
     def on_stop(self, event: ops.StopEvent):
