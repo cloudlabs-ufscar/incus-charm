@@ -7,7 +7,7 @@
 import json
 import logging
 import socket
-from typing import Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Union, cast
 
 import charms.data_platform_libs.v0.data_models as data_models
 import charms.operator_libs_linux.v0.apt as apt
@@ -17,22 +17,31 @@ import ops
 import requests
 from pydantic import ValidationError, validator
 
+import ceph
 import incus
 
 logger = logging.getLogger(__name__)
 
 
-class ClusterAppData(data_models.BaseConfigModel):
+class ClusterAppData(data_models.RelationDataModel):
     """The application data in the cluster relation."""
 
     tokens: Dict[str, str]
     cluster_certificate: str
 
 
-class ClusterUnitData(data_models.BaseConfigModel):
+class ClusterUnitData(data_models.RelationDataModel):
     """The unit data in the cluster relation."""
 
     node_name: str
+
+
+class CephUnitData(data_models.RelationDataModel, extra="ignore"):
+    """The unit data in the ceph relation."""
+
+    key: str
+    auth: str
+    ceph_public_address: str
 
 
 class IncusConfig(data_models.BaseConfigModel):
@@ -96,6 +105,8 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
 
     package_name = "incus"
     service_name = "incus"
+    ceph_package_name = "ceph-common"
+
     config_type = IncusConfig
 
     def __init__(self, framework: ops.Framework):
@@ -122,6 +133,8 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         framework.observe(
             self.tls_certificates.on.certificate_changed, self.on_certificate_changed
         )
+        framework.observe(self.on.ceph_relation_created, self.on_ceph_relation_created)
+        framework.observe(self.on.ceph_relation_changed, self.on_ceph_relation_changed)
 
         # Actions
         framework.observe(
@@ -162,7 +175,8 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
     def on_install(self, event: ops.InstallEvent):
         """Handle install event.
 
-        Adds the Zabbly APT repository and installs the incus package.
+        Adds the Zabbly APT repository and installs the incus package. If a relation
+        to Ceph is present, also installs packages for communicating with Ceph.
         """
         self.unit.status = ops.MaintenanceStatus("Installing packages")
         # TODO: make the repository and gpg key configurable
@@ -170,7 +184,12 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             repository_line="deb https://pkgs.zabbly.com/incus/stable jammy main",
             gpg_key_url="https://pkgs.zabbly.com/key.asc",
         )
-        self._install_package()
+
+        packages = [self.package_name]
+        if self.model.get_relation("ceph"):
+            packages.append(self.ceph_package_name)
+
+        self._install_packages(*packages)
         self.unit.set_workload_version(self._package_version)
 
     def on_config_changed(self, event: ops.ConfigChangedEvent):
@@ -385,6 +404,83 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
 
         logger.info("Certificate applied")
 
+    def on_ceph_relation_created(self, event: ops.RelationCreatedEvent):
+        """Handle ceph-relation-created event.
+
+        Ensures that the local incus service supports the Ceph storage driver, and
+        installs the required packages if needed.
+        """
+        supported_storage_drivers = incus.get_supported_storage_drivers()
+        if "ceph" not in supported_storage_drivers:
+            logger.debug(
+                "Ceph storage driver not currently supported by Incus. Will install needed packages. supported_storage_drivers=%s",
+                supported_storage_drivers,
+            )
+            self.unit.status = ops.MaintenanceStatus(
+                f"Installing {self.ceph_package_name} package"
+            )
+            self._install_packages(self.ceph_package_name)
+            # NOTE: Since Incus checks for supported storage drivers at startup,
+            # we need to restart the service to update the supported storage drivers
+            self.unit.status = ops.MaintenanceStatus(f"Restarting {self.service_name} service")
+            self._restart_service(self.service_name)
+            logger.info(
+                "Installed required Ceph packages. package_name=%s", self.ceph_package_name
+            )
+
+        supported_storage_drivers = incus.get_supported_storage_drivers()
+        assert "ceph" in supported_storage_drivers, "Failed to enable Ceph support on Incus"
+
+    @data_models.parse_relation_data(unit_model=CephUnitData)
+    def on_ceph_relation_changed(
+        self: ops.CharmBase,
+        event: ops.RelationEvent,
+        app_data: Optional[Union[Any, ValidationError]] = None,
+        unit_data: Optional[Union[CephUnitData, ValidationError]] = None,
+    ):
+        """Handle ceph-relation-changed event.
+
+        Gets the endpoints and authentication key from the relation data and
+        writes them to the Ceph configuration files on the system.
+        """
+        self = cast(IncusCharm, self)
+        if unit_data is None:
+            logger.warning("No unit data available. event=%s", event)
+            return
+        if isinstance(unit_data, ValidationError):
+            logger.warning("Invalid unit data. event=%s validation_error=%s", event, str(app_data))
+            return
+
+        logger.debug(
+            "Handling ceph relation changed event. event=%s unit_data=%s", event, unit_data
+        )
+        ceph_addresses = {
+            address
+            for address in (
+                event.relation.data[unit].get("ceph-public-address")
+                for unit in event.relation.units
+            )
+            if address is not None
+        }
+        logger.debug(
+            "Collected Ceph addresses from relation data. ceph_addresses=%s relation_data=%s",
+            ceph_addresses,
+            event.relation.data,
+        )
+
+        ceph_user = self.app.name
+        self.unit.status = ops.MaintenanceStatus("Updating Ceph configuration files")
+        logger.info(
+            "Writing data from relation into ceph config files. ceph_addresses=%s ceph_user=%s",
+            ceph_addresses,
+            ceph_user,
+        )
+        ceph.write_keyring_file(ceph_user=ceph_user, key=unit_data.key)
+        ceph.write_ceph_conf_file(ceph_addresses)
+        # TODO: create the ceph storage pool on all nodes. This will require some
+        # coordination between units... or we can just create all of them in the
+        # leader unit, avoiding any coordination!!
+
     @data_models.validate_params(AddTrustedCertificateActionParams)
     def add_trusted_certificate_action(
         self: ops.CharmBase,
@@ -468,25 +564,27 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             return package_version.split("-")[0]
         return package_version
 
-    def _install_package(self):
-        """Install the `incus` package on the system."""
-        logging.info("Installing package. package_name=%s", self.package_name)
+    def _install_packages(self, *packages: str):
+        """Install the specified `packages` on the system."""
+        logging.info("Installing packages. packages=%s", packages)
+        package = ""
         try:
             apt.update()
-            package = apt.DebianPackage.from_system(self.package_name)
-            package.ensure(apt.PackageState.Present)
-            package_version = package.version.number
-            logger.info(
-                "Installed package. package_name=%s package_version=%s",
-                self.package_name,
-                package_version,
-            )
+            for package in packages:
+                package = apt.DebianPackage.from_system(package)
+                package.ensure(apt.PackageState.Present)
+                package_version = package.version.number
+                logger.info(
+                    "Installed package. package=%s version=%s",
+                    package,
+                    package_version,
+                )
         except apt.PackageNotFoundError:
-            logger.warning("Package not found in repositories. package_name=%s", self.package_name)
+            logger.warning("Package not found in repositories. package=%s", package)
         except apt.PackageError as e:
             logger.error(
-                "Error when installing package. package_name=%s error=%s",
-                self.package_name,
+                "Error when installing package. name=%s error=%s",
+                package,
                 e,
             )
             raise e

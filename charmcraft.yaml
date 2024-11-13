@@ -116,6 +116,10 @@ requires:
     interface: tls-certificates
     optional: true
     limit: 1
+  ceph:
+    interface: ceph-client
+    limit: 1
+    optional: true
 
 parts:
   charm:

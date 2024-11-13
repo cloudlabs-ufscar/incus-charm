@@ -70,6 +70,14 @@ def get_cluster_member_info(node_name: str) -> ClusterMemberInfo:
     return ClusterMemberInfo(**member_data)
 
 
+def get_supported_storage_drivers() -> List[str]:
+    """Get all currently supported storage drivers."""
+    output = run_command("query", "/1.0")
+    node_data = json.loads(output)
+    drivers = [driver["Name"] for driver in node_data["environment"]["storage_supported_drivers"]]
+    return drivers
+
+
 def enable_clustering(member_name: str):
     """Enable clustering on the local Incus node."""
     run_command("cluster", "enable", member_name)
