@@ -14,6 +14,11 @@ from incus import IncusProcessError
 
 
 def test_invalid_input():
+    """Test the add-trusted-certificate action with invalid input.
+
+    No action should be performed in the Incus instance. An error should
+    be returned to the operator.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.is_clustered", return_value=False),
@@ -42,6 +47,10 @@ def test_invalid_input():
 
 
 def test_incus_error(certificate: str):
+    """Test the add-trusted-certificate action when there's an Incus error.
+
+    The error should be returned to the operator.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.is_clustered", return_value=False),
@@ -81,6 +90,10 @@ def test_incus_error(certificate: str):
 
 
 def test_success(certificate: str):
+    """Test the add-trusted-certificate action.
+
+    The unit should add the given certificate to the incus truststore.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.is_clustered", return_value=False),

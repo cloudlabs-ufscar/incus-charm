@@ -12,6 +12,11 @@ from charm import IncusCharm
 
 
 def test_cluster_relation_created_leader():
+    """Test the cluster-relation-created event on leader units.
+
+    The unit should put its node name in the relation data and create the
+    dictionary of join tokens.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
@@ -29,6 +34,10 @@ def test_cluster_relation_created_leader():
 
 
 def test_cluster_relation_created_non_leader():
+    """Test the cluster-relation-created event on non leader units.
+
+    The unit should put its node name in the relation data.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
@@ -46,6 +55,12 @@ def test_cluster_relation_created_non_leader():
 
 
 def test_cluster_relation_changed_leader_not_clustered():
+    """Test the cluster-relation-changed event on leader units that are not clustered.
+
+    The unit should enable clustering in the Incus instance, generate a new token
+    for the remote unit that triggered the event, store it in a secret and write
+    the ID of that secret in the relation data.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
@@ -77,6 +92,12 @@ def test_cluster_relation_changed_leader_not_clustered():
 
 
 def test_cluster_relation_changed_leader_clustered():
+    """Test the cluster-relation-changed event on leader units that are already clustered.
+
+    The unit should not enable clustering in the Incus instance. It should only
+    generate a new token for the remote unit that triggered the event, store it
+    in a secret and write the ID of that secret in the relation data.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
@@ -108,6 +129,11 @@ def test_cluster_relation_changed_leader_clustered():
 
 
 def test_cluster_relation_changed_leader_existing_tokens():
+    """Test the cluster-relation-changed event on leader units when there are existing tokens.
+
+    The unit should generate a new token for the remote unit that triggered the
+    event, store it in a secret and write the ID of that secret in the relation data.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
@@ -149,6 +175,12 @@ def test_cluster_relation_changed_leader_existing_tokens():
 
 
 def test_cluster_relation_changed_non_leader_not_clustered():
+    """Test the cluster-relation-changed event on non leader units that are not clustered.
+
+    The unit should use the secret ID from the relation to retrieve the join token
+    from the secret. The token should then be used to bootstrap Incus and join the
+    cluster.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
@@ -198,6 +230,10 @@ def test_cluster_relation_changed_non_leader_not_clustered():
 
 
 def test_cluster_relation_changed_non_leader_clustered():
+    """Test the cluster-relation-changed event on non leader units that are already clustered.
+
+    The unit should not try the cluster twice. It should skip the event.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
@@ -227,6 +263,11 @@ def test_cluster_relation_changed_non_leader_clustered():
 
 
 def test_cluster_relation_changed_non_leader_not_clustered_no_token():
+    """Test the cluster-relation-changed event on non leader units when no token is available.
+
+    The unit should not try to join the cluster without a token. It should
+    skip the event.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.IncusCharm._node_name", "any-node-name"),

@@ -12,6 +12,10 @@ from charm import IncusCharm
 
 
 def test_stop_not_clustered():
+    """Test the stop event on units that are not clustered.
+
+    The unit should uninstall the incus package.
+    """
     with (
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.get_cluster_member_info"),
@@ -35,6 +39,11 @@ def test_stop_not_clustered():
 
 
 def test_stop_clustered():
+    """Test the stop event on units that are clustered.
+
+    The unit should evacuate itself, leave the cluster and then
+    uninstall the incus package.
+    """
     with (
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),

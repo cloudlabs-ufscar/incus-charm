@@ -15,6 +15,10 @@ from charm import IncusCharm
 
 @pytest.mark.parametrize("server_port,cluster_port", [(8443, 8443), (1234, 1235), (9999, 2000)])
 def test_config_changed_not_clustered(server_port, cluster_port):
+    """Test the config-changed event on units that are not clustered.
+
+    Both the server and cluster ports should be applied to the Incus instance.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.set_config") as set_config,
@@ -48,6 +52,11 @@ def test_config_changed_not_clustered(server_port, cluster_port):
 
 @pytest.mark.parametrize("server_port,cluster_port", [(8443, 8443), (1234, 1235), (9999, 2000)])
 def test_config_changed_clustered(server_port, cluster_port):
+    """Test the config-changed event on units that are clustered.
+
+    The cluster port should not be modified. Only the server port should be
+    applied to the Incus instance.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.set_config") as set_config,
@@ -75,6 +84,11 @@ def test_config_changed_clustered(server_port, cluster_port):
     [(-1, 8443), (1234, -1), (99999999, 8843), (8843, 99999999)],
 )
 def test_config_changed_invalid_port(server_port, cluster_port):
+    """Test the config-changed event with invalid ports.
+
+    The charm should enter in an error state and not apply any configuration
+    to the Incus instance.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.set_config") as set_config,

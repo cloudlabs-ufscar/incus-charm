@@ -16,6 +16,10 @@ from charm import IncusCharm
     "leader,is_clustered", [(False, False), (True, False), (False, True), (True, True)]
 )
 def test_install(leader, is_clustered):
+    """Test the install event.
+
+    The unit should add the APT repository and install the incus package.
+    """
     with (
         patch("charm.IncusCharm._add_apt_repository") as add_apt_repository,
         patch("charm.IncusCharm._package_installed", True),

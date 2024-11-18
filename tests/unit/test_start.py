@@ -12,6 +12,10 @@ from charm import IncusCharm
 
 
 def test_start_leader_not_clustered():
+    """Test the start event when the leader unit is not clustered.
+
+    The unit should bootstrap Incus.
+    """
     with (
         patch("charm.IncusCharm._add_apt_repository"),
         patch("charm.IncusCharm._package_installed", True),
@@ -28,6 +32,10 @@ def test_start_leader_not_clustered():
 
 
 def test_start_leader_already_clustered():
+    """Test the start event when the leader unit is already clustered.
+
+    The unit should not try to bootstrap Incus again.
+    """
     with (
         patch("charm.IncusCharm._add_apt_repository"),
         patch("charm.IncusCharm._package_installed", True),
@@ -44,6 +52,10 @@ def test_start_leader_already_clustered():
 
 
 def test_start_non_leader():
+    """Test the start event on non leader units.
+
+    The unit should not try to bootstrap Incus.
+    """
     with (
         patch("charm.IncusCharm._add_apt_repository"),
         patch("charm.IncusCharm._package_installed", True),

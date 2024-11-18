@@ -14,6 +14,10 @@ from incus import ClusterMemberInfo, ClusterMemberStatus
 
 
 def test_collect_unit_status_package_not_installed():
+    """Test the collect-unit-status-event when the incus package is not installed.
+
+    The unit should be in a blocked state.
+    """
     with patch("charm.IncusCharm._package_installed", False):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(leader=True)
@@ -24,6 +28,10 @@ def test_collect_unit_status_package_not_installed():
 
 
 def test_collect_unit_status_leader_not_clustered():
+    """Test the collect-unit-status-event when the leader unit is not clustered.
+
+    The unit should be in a ready state.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.is_clustered", return_value=False),
@@ -37,6 +45,11 @@ def test_collect_unit_status_leader_not_clustered():
 
 
 def test_collect_unit_status_non_leader_not_clustered():
+    """Test the collect-unit-status-event when the non leader unit is not clustered.
+
+    The unit should be in a waiting state, signaling that it is waiting for
+    a join token.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.is_clustered", return_value=False),
@@ -71,6 +84,10 @@ def test_collect_unit_status_non_leader_not_clustered():
     ],
 )
 def test_collect_unit_status_cluster_info(member_info: ClusterMemberInfo, expected_status):
+    """Test the collect-unit-status-event when the unit is clustered.
+
+    The unit should use the Incus cluster state to set its own status.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.is_clustered", return_value=True),

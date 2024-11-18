@@ -15,6 +15,11 @@ from incus import IncusProcessError
 
 @pytest.mark.parametrize("format", ("", "any-invalid-format"))
 def test_invalid_input(format):
+    """Test the cluster-list action with invalid input.
+
+    No action should be performed in the Incus instance. An error should
+    be returned to the operator.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.is_clustered", return_value=True),
@@ -41,6 +46,10 @@ def test_invalid_input(format):
 
 
 def test_incus_error():
+    """Test the cluster-list action when there's an Incus error.
+
+    The error should be returned to the operator.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.is_clustered", return_value=True),
@@ -64,6 +73,11 @@ def test_incus_error():
 
 
 def test_unit_not_in_cluster():
+    """Test the cluster-list action when the unit is not clustered.
+
+    No action should be performed in the Incus instance. An error should
+    be returned to the operator.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.is_clustered", return_value=False),
@@ -84,6 +98,11 @@ def test_unit_not_in_cluster():
 
 
 def test_success():
+    """Test the cluster-list action.
+
+    The unit should call return the output of the incus cluster list command
+    to the operator.
+    """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.incus.is_clustered", return_value=True),

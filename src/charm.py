@@ -112,7 +112,11 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         framework.observe(self.on.cluster_list_action, self.cluster_list_action)
 
     def on_collect_unit_status(self, event: ops.CollectStatusEvent):
-        """Handle collect unit status event."""
+        """Handle collect-unit-status event.
+
+        Collects the status of the current Incus deployment to present it
+        on `juju status` output.
+        """
         if not self._package_installed:
             event.add_status(ops.BlockedStatus(f"Package '{self.package_name}' not installed"))
             return
@@ -135,7 +139,10 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         event.add_status(ops.BlockedStatus(f"{info.status.value}: {info.message}"))
 
     def on_install(self, event: ops.InstallEvent):
-        """Handle install event."""
+        """Handle install event.
+
+        Adds the Zabbly APT repository and installs the incus package.
+        """
         self.unit.status = ops.MaintenanceStatus("Installing packages")
         # TODO: make the repository and gpg key configurable
         self._add_apt_repository(
@@ -146,7 +153,10 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         self.unit.set_workload_version(self._package_version)
 
     def on_config_changed(self, event: ops.ConfigChangedEvent):
-        """Handle config changed event."""
+        """Handle config-changed event.
+
+        Applies the given configuration to the Incus instance.
+        """
         self.unit.status = ops.MaintenanceStatus("Changing config")
 
         public_address = ""
@@ -163,14 +173,22 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             incus.set_config("cluster.https_address", self._cluster_address)
 
     def on_start(self, event: ops.StartEvent):
-        """Handle start event."""
+        """Handle start event.
+
+        Bootstraps the Incus instance if the current unit is leader. Non leader
+        units are bootstrapped by receiving join tokens via the cluster relation.
+        """
         # NOTE: to handle restarts, we should ensure that we only try to
         # bootstrap if the current node is not already part of a cluster
         if self.unit.is_leader() and not incus.is_clustered():
             self._bootstrap_incus()
 
     def on_stop(self, event: ops.StopEvent):
-        """Handle stop event."""
+        """Handle stop event.
+
+        Removes the current Incus instance from the cluster and uninstalls the
+        incus package.
+        """
         if incus.is_clustered():
             self.unit.status = ops.MaintenanceStatus("Evacuating node")
             logger.info("Evacuating cluster member. node_name=%s", self._node_name)
@@ -184,7 +202,11 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         self._uninstall_package()
 
     def on_cluster_relation_created(self, event: ops.RelationCreatedEvent):
-        """Handle cluster relation created event."""
+        """Handle cluster-relation-created event.
+
+        Adds the node name of the current unit in the relation data. The leader
+        unit also adds the tokens dictionary on the relation data.
+        """
         event.relation.data[self.unit]["node-name"] = self._node_name
         if self.unit.is_leader():
             event.relation.data[event.app]["tokens"] = json.dumps({})
@@ -196,7 +218,15 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         app_data: Optional[Union[ClusterAppData, ValidationError]] = None,
         unit_data: Optional[Union[ClusterUnitData, ValidationError]] = None,
     ):
-        """Handle cluster relation changed event."""
+        """Handle cluster-relation-changed event.
+
+        The leader unit enables clustering in the Incus instance if it is not
+        already enables. It also generates a join token for the remote unit that
+        triggered the event if one does not already exist.
+
+        Non leader units get the token from the relation data and use it to join
+        the Incus cluster.
+        """
         # HACK: the typings for the `data_models` library are a bit broken, so we have
         # to declare `self` as `ops.CharmBase` and then cast it back to `IncusCharm`.
         self = cast(IncusCharm, self)
@@ -268,7 +298,10 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         event: ops.ActionEvent,
         params: Union[AddTrustedCertificateActionParams, ValidationError],
     ):
-        """Handle the add-trusted-certificate action."""
+        """Handle the add-trusted-certificate action.
+
+        Adds the received certificate to the Incus truststore.
+        """
         if isinstance(params, ValidationError):
             return event.fail(str(params))
         self.unit.status = ops.MaintenanceStatus("Adding trusted certificate")
@@ -295,7 +328,10 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         event: ops.ActionEvent,
         params: Union[ClusterListActionParams, ValidationError],
     ):
-        """Handle the cluster-list action."""
+        """Handle the cluster-list action.
+
+        Lists the cluster state and return its output.
+        """
         try:
             if not incus.is_clustered():
                 return event.fail("Unit is not clustered")
