@@ -105,6 +105,12 @@ peers:
   cluster:
     interface: incus-cluster
 
+requires:
+  certificates:
+    interface: tls-certificates
+    optional: true
+    limit: 1
+
 parts:
   charm:
     build-packages:

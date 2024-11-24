@@ -13,7 +13,17 @@ applications:
       - 2
     bindings:
       "": alpha
-    constraints: arch=amd64
+  vault:
+    charm: vault
+    channel: 1.8/stable
+    num_units: 1
+    to:
+      - lxd:0
+    bindings:
+      "": alpha
+    options:
+      auto-generate-root-ca-cert: true
+      totally-unsecure-auto-unlock: true
 
 machines:
   0:
@@ -22,3 +32,7 @@ machines:
     constraints: virt-type=virtual-machine mem=2G
   2:
     constraints: virt-type=virtual-machine mem=2G
+
+relations:
+  - - incus:certificates
+    - vault:certificates

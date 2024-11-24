@@ -11,6 +11,8 @@ from typing import Dict, List, Optional, Union, cast
 
 import charms.data_platform_libs.v0.data_models as data_models
 import charms.operator_libs_linux.v0.apt as apt
+import charms.operator_libs_linux.v1.systemd as systemd
+import charms.tls_certificates_interface.v0.tls_certificates as tls_certificates
 import ops
 import requests
 from pydantic import ValidationError, validator
@@ -91,10 +93,21 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
     """Charm the Incus application."""
 
     package_name = "incus"
+    service_name = "incus"
     config_type = IncusConfig
 
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
+
+        # Certificate request
+        sans = []
+        for binding_name in ("public", "cluster"):
+            binding = self.model.get_binding(binding_name)
+            if binding and binding.network.bind_address:
+                sans.append(str(binding.network.bind_address))
+        self.tls_certificates = tls_certificates.TLSCertificatesRequires(
+            self, common_name=socket.getfqdn(), sans=sans
+        )
 
         # Events
         framework.observe(self.on.collect_unit_status, self.on_collect_unit_status)
@@ -104,6 +117,9 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         framework.observe(self.on.stop, self.on_stop)
         framework.observe(self.on.cluster_relation_created, self.on_cluster_relation_created)
         framework.observe(self.on.cluster_relation_changed, self.on_cluster_relation_changed)
+        framework.observe(
+            self.tls_certificates.on.certificate_changed, self.on_certificate_changed
+        )
 
         # Actions
         framework.observe(
@@ -292,6 +308,32 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             assert token, "Join token secret has an invalid content."
             self._bootstrap_incus(token)
 
+    def on_certificate_changed(self, event: tls_certificates.CertificateChangedEvent):
+        """Handle certificate-changed event.
+
+        Updates the certificate on all cluster members.
+        """
+        certificate = event.certificate
+        logger.debug("Handling certificate changed event. certificate=%s", certificate)
+        self.unit.status = ops.MaintenanceStatus("Applying certificate")
+        logger.info("Applying certificate")
+        incus.update_server_certificate(
+            cert=certificate.cert, key=certificate.key, ca=certificate.ca
+        )
+        if not incus.is_clustered():
+            logger.debug(
+                "Unit is standalone. Will restart service to apply new certificate. certificate=%s",
+                certificate,
+            )
+            self._restart_service(self.service_name)
+        elif self.unit.is_leader():
+            logger.debug(
+                "Unit is the cluster leader. Will apply certificate to all cluster members. certificate=%s",
+                certificate,
+            )
+            incus.update_cluster_certificate(cert=certificate.cert, key=certificate.key)
+        logger.info("Certificate applied")
+
     @data_models.validate_params(AddTrustedCertificateActionParams)
     def add_trusted_certificate_action(
         self: ops.CharmBase,
@@ -440,6 +482,14 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             repository_line,
             gpg_key_url,
         )
+
+    def _restart_service(self, service: str):
+        """Restart the given `service`."""
+        try:
+            systemd.service_restart(service)
+        except systemd.SystemdError as e:
+            logger.error("Error when restarting systemd service. error=%s", e)
+            raise e
 
     def _bootstrap_incus(self, join_token: Optional[str] = None):
         """Bootstraps the Incus server via `incus admin init`.

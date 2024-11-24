@@ -4,6 +4,7 @@ import json
 import logging
 import subprocess
 from enum import Enum
+from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import List, Literal, Optional, Union
 
@@ -14,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 CLIFormats = Literal["csv", "json", "table", "yaml", "compact"]
+
+INCUS_VAR_DIR = Path("/var/lib/incus")
 
 
 class ClusterMemberStatus(str, Enum):
@@ -108,6 +111,26 @@ def add_trusted_certificate(
         file.write(cert.strip().encode())
         file.flush()
         run_command(*args)
+
+
+def update_cluster_certificate(cert: str, key: str):
+    """Update the cluster members certificate to the new `cert` and `key`."""
+    with NamedTemporaryFile() as cert_file, NamedTemporaryFile() as key_file:
+        cert_file.write(cert.strip().encode())
+        cert_file.flush()
+        key_file.write(key.strip().encode())
+        key_file.flush()
+        run_command("cluster", "update-certificate", cert_file.name, key_file.name)
+
+
+def update_server_certificate(cert: str, key: str, ca: str):
+    """Update the server certificate with to the new `cert`, `key` and `ca`."""
+    with open(INCUS_VAR_DIR / "server.crt", "w+") as file:
+        file.write(cert)
+    with open(INCUS_VAR_DIR / "server.key", "w+") as file:
+        file.write(key)
+    with open(INCUS_VAR_DIR / "server.ca", "w+") as file:
+        file.write(ca)
 
 
 def run_command(*args: str, input: Optional[str] = None) -> str:
