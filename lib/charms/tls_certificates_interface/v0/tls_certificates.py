@@ -95,6 +95,11 @@ class TLSCertificatesRequires(Object):
 
         self._stored.set_default(certificate=None)
 
+    @property
+    def certificate(self) -> Optional[Certificate]:
+        """The certificate issued for the current unit."""
+        return self._get_certificate_from_relation_data()
+
     def _on_relation_created(self, event: RelationCreatedEvent):
         """Handle relation created event on the certificates relation.
 
@@ -153,6 +158,10 @@ class TLSCertificatesRequires(Object):
 
             certificate = Certificate(cert=cert, key=key, ca=ca)
             certificates.add(certificate)
+
+        if len(certificates) == 0:
+            logger.debug("No certificates found in the relation. certificates=%s", certificates)
+            return None
 
         if len(certificates) > 1:
             logger.debug(

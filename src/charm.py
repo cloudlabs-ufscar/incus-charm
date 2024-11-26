@@ -137,6 +137,9 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             event.add_status(ops.BlockedStatus(f"Package '{self.package_name}' not installed"))
             return
 
+        if self.model.get_relation("certificates") and not self.tls_certificates.certificate:
+            event.add_status(ops.WaitingStatus("Waiting for certificate"))
+
         is_clustered = incus.is_clustered()
         if not self.unit.is_leader() and not is_clustered:
             event.add_status(ops.WaitingStatus("Waiting for cluster token"))
