@@ -123,7 +123,7 @@ def test_certificates_relation_changed_single_remote_unit():
         patch("charm.incus.update_server_certificate"),
     ):
         ctx = scenario.Context(IncusCharm)
-        relation = scenario.Relation(
+        certificates_relation = scenario.Relation(
             endpoint="certificates",
             interface="tls-certificates",
             remote_units_data={
@@ -136,11 +136,12 @@ def test_certificates_relation_changed_single_remote_unit():
                 },
             },
         )
-        state = scenario.State(leader=True, relations={relation})
+        cluster_relation = scenario.PeerRelation(endpoint="cluster", interface="incus-cluster")
+        state = scenario.State(leader=True, relations={certificates_relation, cluster_relation})
 
-        out = ctx.run(ctx.on.relation_changed(relation=relation), state)
+        out = ctx.run(ctx.on.relation_changed(relation=certificates_relation), state)
 
-        relation = out.get_relation(relation.id)
+        certificates_relation = out.get_relation(certificates_relation.id)
         assert len(ctx.emitted_events) == 2
         event = ctx.emitted_events[1]
         assert isinstance(event, CertificateChangedEvent)
@@ -207,7 +208,7 @@ def test_certificates_relation_changed_multiple_remote_units():
         patch("charm.incus.update_server_certificate"),
     ):
         ctx = scenario.Context(IncusCharm)
-        relation = scenario.Relation(
+        certificates_relation = scenario.Relation(
             endpoint="certificates",
             interface="tls-certificates",
             remote_units_data={
@@ -234,11 +235,12 @@ def test_certificates_relation_changed_multiple_remote_units():
                 },
             },
         )
-        state = scenario.State(leader=True, relations={relation})
+        cluster_relation = scenario.PeerRelation(endpoint="cluster", interface="incus-cluster")
+        state = scenario.State(leader=True, relations={certificates_relation, cluster_relation})
 
-        out = ctx.run(ctx.on.relation_changed(relation=relation), state)
+        out = ctx.run(ctx.on.relation_changed(relation=certificates_relation), state)
 
-        relation = out.get_relation(relation.id)
+        certificates_relation = out.get_relation(certificates_relation.id)
         assert len(ctx.emitted_events) == 2
         event = ctx.emitted_events[1]
         assert isinstance(event, CertificateChangedEvent)
@@ -259,7 +261,7 @@ def test_certificate_changed_not_clustered():
         patch("charm.incus.update_server_certificate") as update_server_certificate,
     ):
         ctx = scenario.Context(IncusCharm)
-        relation = scenario.Relation(
+        certificates_relation = scenario.Relation(
             endpoint="certificates",
             interface="tls-certificates",
             remote_units_data={
@@ -272,9 +274,10 @@ def test_certificate_changed_not_clustered():
                 },
             },
         )
-        state = scenario.State(leader=True, relations={relation})
+        cluster_relation = scenario.PeerRelation(endpoint="cluster", interface="incus-cluster")
+        state = scenario.State(leader=True, relations={certificates_relation, cluster_relation})
 
-        ctx.run(ctx.on.relation_changed(relation=relation), state)
+        ctx.run(ctx.on.relation_changed(relation=certificates_relation), state)
 
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
@@ -342,7 +345,7 @@ def test_certificate_changed_clustered_leader():
         patch("charm.incus.get_cluster_member_info"),
     ):
         ctx = scenario.Context(IncusCharm)
-        relation = scenario.Relation(
+        certificates_relation = scenario.Relation(
             endpoint="certificates",
             interface="tls-certificates",
             remote_units_data={
@@ -355,9 +358,10 @@ def test_certificate_changed_clustered_leader():
                 },
             },
         )
-        state = scenario.State(leader=True, relations={relation})
+        cluster_relation = scenario.PeerRelation(endpoint="cluster", interface="incus-cluster")
+        state = scenario.State(leader=True, relations={certificates_relation, cluster_relation})
 
-        ctx.run(ctx.on.relation_changed(relation=relation), state)
+        ctx.run(ctx.on.relation_changed(relation=certificates_relation), state)
 
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
@@ -424,7 +428,7 @@ def test_certificates_relation_changed_certificate_old_stored():
         patch("charm.incus.update_server_certificate"),
     ):
         ctx = scenario.Context(IncusCharm)
-        relation = scenario.Relation(
+        certificates_relation = scenario.Relation(
             endpoint="certificates",
             interface="tls-certificates",
             remote_units_data={
@@ -437,6 +441,7 @@ def test_certificates_relation_changed_certificate_old_stored():
                 },
             },
         )
+        cluster_relation = scenario.PeerRelation(endpoint="cluster", interface="incus-cluster")
         stored_state = scenario.StoredState(
             "_stored",
             owner_path="IncusCharm/TLSCertificatesRequires[certificates]",
@@ -444,11 +449,15 @@ def test_certificates_relation_changed_certificate_old_stored():
                 "certificate": {"cert": "any-server-cert", "key": "any-server-key", "ca": "any-ca"}
             },
         )
-        state = scenario.State(leader=True, relations={relation}, stored_states={stored_state})
+        state = scenario.State(
+            leader=True,
+            relations={certificates_relation, cluster_relation},
+            stored_states={stored_state},
+        )
 
-        out = ctx.run(ctx.on.relation_changed(relation=relation), state)
+        out = ctx.run(ctx.on.relation_changed(relation=certificates_relation), state)
 
-        relation = out.get_relation(relation.id)
+        certificates_relation = out.get_relation(certificates_relation.id)
         assert len(ctx.emitted_events) == 2
         event = ctx.emitted_events[1]
         assert isinstance(event, CertificateChangedEvent)

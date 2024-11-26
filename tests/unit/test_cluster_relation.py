@@ -11,16 +11,17 @@ import scenario
 from charm import IncusCharm
 
 
-def test_cluster_relation_created_leader():
+def test_cluster_relation_created_leader_no_certificate():
     """Test the cluster-relation-created event on leader units.
 
-    The unit should put its node name in the relation data and create the
-    dictionary of join tokens.
+    The unit should create the dictionary of join tokens and put its
+    certificate on the relation data.
     """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.incus.get_server_certificate", return_value="any-certificate"),
     ):
         ctx = scenario.Context(IncusCharm)
         relation = scenario.PeerRelation(endpoint="cluster", interface="incus-cluster")
@@ -29,29 +30,43 @@ def test_cluster_relation_created_leader():
         out = ctx.run(ctx.on.relation_created(relation=relation), state)
 
         relation = out.get_relation(relation.id)
-        assert relation.local_unit_data["node-name"] == "any-node-name"
         assert relation.local_app_data["tokens"] == "{}"
+        assert relation.local_app_data["cluster-certificate"] == "any-certificate"
 
 
-def test_cluster_relation_created_non_leader():
-    """Test the cluster-relation-created event on non leader units.
+def test_cluster_relation_created_leader():
+    """Test the cluster-relation-created event on leader units.
 
-    The unit should put its node name in the relation data.
+    The unit should create the dictionary of join tokens.
     """
     with (
         patch("charm.IncusCharm._package_installed", True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.incus.get_server_certificate") as get_server_certificate,
     ):
         ctx = scenario.Context(IncusCharm)
-        relation = scenario.PeerRelation(endpoint="cluster", interface="incus-cluster")
-        state = scenario.State(leader=False, relations={relation})
+        certificates_relation = scenario.Relation(
+            endpoint="certificates",
+            interface="tls-certificates",
+            remote_units_data={
+                0: {
+                    "ca": "any-ca",
+                    "client.cert": "any-client-cert",
+                    "client.key": "any-client-key",
+                    "incus_0.server.cert": "any-server-cert",
+                    "incus_0.server.key": "any-server-key",
+                },
+            },
+        )
+        cluster_relation = scenario.PeerRelation(endpoint="cluster", interface="incus-cluster")
+        state = scenario.State(leader=True, relations={certificates_relation, cluster_relation})
 
-        out = ctx.run(ctx.on.relation_created(relation=relation), state)
+        out = ctx.run(ctx.on.relation_created(relation=cluster_relation), state)
 
-        relation = out.get_relation(relation.id)
-        assert relation.local_unit_data["node-name"] == "any-node-name"
-        assert "tokens" not in relation.local_app_data
+        cluster_relation = out.get_relation(cluster_relation.id)
+        assert cluster_relation.local_app_data["tokens"] == "{}"
+        get_server_certificate.assert_not_called()
 
 
 def test_cluster_relation_changed_leader_not_clustered():
@@ -73,7 +88,7 @@ def test_cluster_relation_changed_leader_not_clustered():
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={1: {"node-name": "peer-node-name"}},
-            local_app_data={"tokens": "{}"},
+            local_app_data={"tokens": "{}", "cluster-certificate": "any-cluster-certificate"},
         )
         state = scenario.State(leader=True, relations={relation})
 
@@ -111,7 +126,7 @@ def test_cluster_relation_changed_leader_clustered():
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={1: {"node-name": "peer-node-name"}},
-            local_app_data={"tokens": "{}"},
+            local_app_data={"tokens": "{}", "cluster-certificate": "any-cluster-certificate"},
         )
         state = scenario.State(leader=True, relations={relation})
 
@@ -152,7 +167,10 @@ def test_cluster_relation_changed_leader_existing_tokens():
                 1: {"node-name": "peer-node-name"},
                 2: {"node-name": "new-peer-node-name"},
             },
-            local_app_data={"tokens": '{"peer-node-name": "any-join-token-secret-id"}'},
+            local_app_data={
+                "tokens": '{"peer-node-name": "any-join-token-secret-id"}',
+                "cluster-certificate": "any-cluster-certificate",
+            },
         )
         state = scenario.State(leader=True, relations={relation})
 
@@ -195,7 +213,10 @@ def test_cluster_relation_changed_non_leader_not_clustered():
                 0: {"node-name": "leader-node-name"},
                 1: {"node-name": "any-node-name"},
             },
-            local_app_data={"tokens": '{"any-node-name": "any-join-token-secret-id"}'},
+            local_app_data={
+                "tokens": '{"any-node-name": "any-join-token-secret-id"}',
+                "cluster-certificate": "any-cluster-certificate",
+            },
         )
         state = scenario.State(
             leader=False,
@@ -222,6 +243,7 @@ def test_cluster_relation_changed_non_leader_not_clustered():
             "enabled": True,
             "cluster_token": "any-join-token",
             "server_address": "10.0.0.2:8888",
+            "cluster_certificate": "any-cluster-certificate",
         }
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
@@ -249,7 +271,10 @@ def test_cluster_relation_changed_non_leader_clustered():
                 0: {"node-name": "leader-node-name"},
                 1: {"node-name": "any-node-name"},
             },
-            local_app_data={"tokens": '{"any-node-name": "any-join-token-secret-id"}'},
+            local_app_data={
+                "tokens": '{"any-node-name": "any-join-token-secret-id"}',
+                "cluster-certificate": "any-cluster-certificate",
+            },
         )
         state = scenario.State(leader=False, relations={relation})
 
@@ -282,7 +307,10 @@ def test_cluster_relation_changed_non_leader_not_clustered_no_token():
                 0: {"node-name": "leader-node-name"},
                 1: {"node-name": "any-node-name"},
             },
-            local_app_data={"tokens": "{}"},
+            local_app_data={
+                "tokens": "{}",
+                "cluster-certificate": "any-cluster-certificate",
+            },
         )
         state = scenario.State(leader=False, relations={relation})
 

@@ -26,6 +26,7 @@ class ClusterAppData(data_models.BaseConfigModel):
     """The application data in the cluster relation."""
 
     tokens: Dict[str, str]
+    cluster_certificate: str
 
 
 class ClusterUnitData(data_models.BaseConfigModel):
@@ -223,12 +224,20 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
     def on_cluster_relation_created(self, event: ops.RelationCreatedEvent):
         """Handle cluster-relation-created event.
 
-        Adds the node name of the current unit in the relation data. The leader
-        unit also adds the tokens dictionary on the relation data.
+        The leader unit initializes the application data bag by creating the
+        dictionary for the join tokens and the cluster certificate, if one is
+        available.
         """
-        event.relation.data[self.unit]["node-name"] = self._node_name
-        if self.unit.is_leader():
-            event.relation.data[event.app]["tokens"] = json.dumps({})
+        if not self.unit.is_leader():
+            return
+
+        # NOTE: if there's a certificates relation, the certificate should
+        # be put in the relation data in response to a certificate-changed
+        # event. Otherwise, the cluster certificate will be the self-signed
+        # certificate of the leader unit.
+        if not self.model.get_relation("certificates"):
+            event.relation.data[event.app]["cluster-certificate"] = incus.get_server_certificate()
+        event.relation.data[event.app]["tokens"] = json.dumps({})
 
     @data_models.parse_relation_data(app_model=ClusterAppData, unit_model=ClusterUnitData)
     def on_cluster_relation_changed(
@@ -256,6 +265,8 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             logger.warning("Invalid app data. event=%s validation_error=%s", event, str(app_data))
             return
 
+        event.relation.data[self.unit]["node-name"] = self._node_name
+
         if self.unit.is_leader():
             if unit_data is None:
                 logger.warning("No unit data available. event=%s", event)
@@ -265,10 +276,14 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                     "Invalid unit data. event=%s validation_error=%s", event, str(unit_data)
                 )
                 return
+
             if not incus.is_clustered():
                 self.unit.status = ops.MaintenanceStatus("Enabling clustering")
                 logger.info("Node has not enabled clustering. Will enable it.")
                 incus.enable_clustering(self._node_name)
+                certificate = self.tls_certificates.certificate
+                if certificate:
+                    incus.update_cluster_certificate(cert=certificate.cert, key=certificate.key)
 
             node_name = unit_data.node_name
             if node_name in app_data.tokens:
@@ -290,6 +305,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         else:
             if incus.is_clustered():
                 return
+
             node_name = self._node_name
             logger.debug(
                 "Checking if secret ID for join token is available in application data. node_name=%s app_data=%s",
@@ -298,7 +314,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             )
             secret_id = app_data.tokens.get(node_name)
             if not secret_id:
-                logger.debug("Secret ID not found in app data.")
+                logger.debug("Secret ID not found in application data.")
                 return
 
             logger.info(
@@ -309,7 +325,8 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             logger.debug("Got secret with join token from model.")
             token = secret.get_content().get("token")
             assert token, "Join token secret has an invalid content."
-            self._bootstrap_incus(token)
+            cluster_certificate = app_data.cluster_certificate
+            self._bootstrap_incus(join_token=token, cluster_certificate=cluster_certificate)
 
     def on_certificate_changed(self, event: tls_certificates.CertificateChangedEvent):
         """Handle certificate-changed event.
@@ -323,6 +340,14 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         incus.update_server_certificate(
             cert=certificate.cert, key=certificate.key, ca=certificate.ca
         )
+
+        # NOTE: put the certificate in the relation data so other units can
+        # join the cluster using this certificate
+        if self.unit.is_leader():
+            cluster_relation = self.model.get_relation("cluster")
+            assert cluster_relation, "Cluster peer relation does not exist."
+            cluster_relation.data[self.app]["cluster-certificate"] = certificate.cert
+
         if not incus.is_clustered():
             logger.debug(
                 "Unit is standalone. Will restart service to apply new certificate. certificate=%s",
@@ -494,10 +519,13 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             logger.error("Error when restarting systemd service. error=%s", e)
             raise e
 
-    def _bootstrap_incus(self, join_token: Optional[str] = None):
+    def _bootstrap_incus(
+        self, join_token: Optional[str] = None, cluster_certificate: Optional[str] = None
+    ):
         """Bootstraps the Incus server via `incus admin init`.
 
-        If `join_token` is provided, joins an existing cluster.
+        If `join_token` is provided, joins an existing cluster using `cluster_certificate` to
+        authenticate with the existing members.
         """
         self.unit.status = ops.MaintenanceStatus("Bootstrapping Incus")
         logger.info("Bootstrapping Incus")
@@ -507,6 +535,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             else {
                 "enabled": True,
                 "cluster_token": join_token,
+                "cluster_certificate": cluster_certificate,
                 "server_address": self._cluster_address,
             }
         )

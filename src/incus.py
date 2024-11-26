@@ -133,6 +133,13 @@ def update_server_certificate(cert: str, key: str, ca: str):
         file.write(ca)
 
 
+def get_server_certificate() -> str:
+    """Get the server certificate in the Incus var directory."""
+    cert_path = INCUS_VAR_DIR / "server.crt"
+    assert cert_path.exists(), f"Certificate file does not exist. cert_path={cert_path}"
+    return cert_path.read_text().strip()
+
+
 def run_command(*args: str, input: Optional[str] = None) -> str:
     """Execute the incus CLI with the given `args` on the local socket.
 

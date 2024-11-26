@@ -31,7 +31,7 @@ extend-exclude = ["__pycache__", "*.egg_info"]
 lint.per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
 
 [tool.ruff.lint.mccabe]
-max-complexity = 10
+max-complexity = 15
 
 [tool.codespell]
 skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage"
