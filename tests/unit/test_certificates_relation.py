@@ -147,6 +147,12 @@ def test_certificates_relation_changed_single_remote_unit():
         assert event.certificate == Certificate(
             cert="any-server-cert", key="any-server-key", ca="any-ca"
         )
+        stored = out.get_stored_state(
+            "_stored", owner_path="IncusCharm/TLSCertificatesRequires[certificates]"
+        )
+        assert stored.content == {
+            "certificate": {"cert": "any-server-cert", "key": "any-server-key", "ca": "any-ca"}
+        }
 
 
 def test_certificates_relation_changed_multiple_remote_units_inconsistency():
@@ -363,4 +369,89 @@ def test_certificate_changed_clustered_leader():
         restart_service.assert_not_called()
         update_cluster_certificate.assert_called_once_with(
             cert="any-server-cert", key="any-server-key"
+        )
+
+
+def test_certificates_relation_changed_certificate_already_stored():
+    """Test the certificates-relation-changed event when the certificate is already stored.
+
+    A certificate changed event should not be emitted to the charm.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._restart_service"),
+        patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.incus.update_server_certificate"),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        relation = scenario.Relation(
+            endpoint="certificates",
+            interface="tls-certificates",
+            remote_units_data={
+                0: {
+                    "ca": "any-ca",
+                    "client.cert": "any-client-cert",
+                    "client.key": "any-client-key",
+                    "incus_0.server.cert": "any-server-cert",
+                    "incus_0.server.key": "any-server-key",
+                },
+            },
+        )
+        stored_state = scenario.StoredState(
+            "_stored",
+            owner_path="IncusCharm/TLSCertificatesRequires[certificates]",
+            content={
+                "certificate": {"cert": "any-server-cert", "key": "any-server-key", "ca": "any-ca"}
+            },
+        )
+        state = scenario.State(leader=True, relations={relation}, stored_states={stored_state})
+
+        out = ctx.run(ctx.on.relation_changed(relation=relation), state)
+
+        relation = out.get_relation(relation.id)
+        assert len(ctx.emitted_events) == 1
+
+
+def test_certificates_relation_changed_certificate_old_stored():
+    """Test the certificates-relation-changed event when the certificate is updated and the old certificate is stored.
+
+    A certificate changed event should be emitted to the charm.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._restart_service"),
+        patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.incus.update_server_certificate"),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        relation = scenario.Relation(
+            endpoint="certificates",
+            interface="tls-certificates",
+            remote_units_data={
+                0: {
+                    "ca": "any-ca",
+                    "client.cert": "any-client-cert",
+                    "client.key": "any-client-key",
+                    "incus_0.server.cert": "any-updated-cert",
+                    "incus_0.server.key": "any-updated-key",
+                },
+            },
+        )
+        stored_state = scenario.StoredState(
+            "_stored",
+            owner_path="IncusCharm/TLSCertificatesRequires[certificates]",
+            content={
+                "certificate": {"cert": "any-server-cert", "key": "any-server-key", "ca": "any-ca"}
+            },
+        )
+        state = scenario.State(leader=True, relations={relation}, stored_states={stored_state})
+
+        out = ctx.run(ctx.on.relation_changed(relation=relation), state)
+
+        relation = out.get_relation(relation.id)
+        assert len(ctx.emitted_events) == 2
+        event = ctx.emitted_events[1]
+        assert isinstance(event, CertificateChangedEvent)
+        assert event.certificate == Certificate(
+            cert="any-updated-cert", key="any-updated-key", ca="any-ca"
         )

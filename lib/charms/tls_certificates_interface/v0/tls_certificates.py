@@ -9,7 +9,7 @@ import socket
 from dataclasses import asdict, dataclass
 from typing import List, Optional, Set
 
-from ops import RelationChangedEvent, RelationCreatedEvent
+from ops import RelationChangedEvent, RelationCreatedEvent, StoredState
 from ops.charm import CharmBase, CharmEvents
 from ops.framework import EventBase, EventSource, Object
 
@@ -35,6 +35,17 @@ class Certificate:
     cert: str
     key: str
     ca: str
+
+    def dump(self) -> dict:
+        """Dumps the certificate into a serializable dictionary."""
+        return asdict(self)
+
+    @classmethod
+    def load(cls, data: Optional[dict]) -> Optional["Certificate"]:
+        """Loads the certificate from a serializable dictionary."""
+        if data is None:
+            return None
+        return cls(**data)
 
 
 class CertificateChangedEvent(EventBase):
@@ -63,6 +74,7 @@ class TLSCertificatesRequires(Object):
     """The requires side of the tls-certificates interface v0."""
 
     on = CertificatesRequiresCharmEvents()
+    _stored = StoredState()
 
     def __init__(
         self,
@@ -80,6 +92,8 @@ class TLSCertificatesRequires(Object):
 
         self.framework.observe(charm.on[relation_name].relation_created, self._on_relation_created)
         self.framework.observe(charm.on[relation_name].relation_changed, self._on_relation_changed)
+
+        self._stored.set_default(certificate=None)
 
     def _on_relation_created(self, event: RelationCreatedEvent):
         """Handle relation created event on the certificates relation.
@@ -102,8 +116,21 @@ class TLSCertificatesRequires(Object):
         """Handler triggerred on relation changed events."""
         logger.debug("Handling certificate relation changed. data=%s", event.relation.data)
         certificate = self._get_certificate_from_relation_data()
-        if certificate:
-            self.on.certificate_changed.emit(certificate=certificate)
+        if not certificate:
+            logger.debug(
+                "Certificate not found in the relation data. relation_data=%s", event.relation.data
+            )
+            return
+
+        if certificate == Certificate.load(self._stored.certificate):
+            logger.debug(
+                "Certificate found in the relation data was already seen. Will not emit event. certificate=%s",
+                certificate,
+            )
+            return
+
+        self._stored.certificate = certificate.dump()
+        self.on.certificate_changed.emit(certificate=certificate)
 
     def _get_certificate_from_relation_data(self) -> Optional[Certificate]:
         """Retrieve the certificate for the current unit from the relation data."""
