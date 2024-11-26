@@ -25,7 +25,7 @@ METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 DEPLOY_TIMEOUT = 30 * 60  # 30min
 OPERATION_TIMEOUT = 60  # 1min
 APP_NAME = METADATA["name"]
-BUNDLE_FILENAME = Path("tests/integration/bundles/incus.yaml.j2").absolute()
+BUNDLE_FILENAME = Path("tests/integration/bundles/incus_clustered.yaml.j2").absolute()
 TEST_INSTANCE_NAME = "test-instance"
 
 
@@ -99,19 +99,54 @@ async def test_workload_connectivity(ops_test: OpsTest, tmp_path: Path):
     application = ops_test.model.applications[APP_NAME]
     assert application, "Application not found in model"
 
-    unit = application.units[0]
-    certificate = await get_certificate_chain(ops_test, unit=unit, tmp_path=tmp_path)
-    assert unit.workload_status_message == "Unit is ready"
+    certificates: Set[str] = set()
+    for unit in application.units:
+        certificate = await get_certificate_chain(ops_test, unit=unit, tmp_path=tmp_path)
+        certificates.add(certificate)
+        assert unit.workload_status_message == "Online: Fully operational"
 
-    cert_path = tmp_path / "cert.crt"
-    cert_path.write_text(certificate)
-    public_address = await unit.get_public_address()
-    response = requests.get(f"https://{public_address}:8443", verify=False)
-    assert response.ok
-    content = json.loads(response.content)
-    assert content["status"] == "Success"
-    assert content["status_code"] == 200
-    assert content["error_code"] == 0
+        cert_path = tmp_path / "cert.crt"
+        cert_path.write_text(certificate)
+        public_address = await unit.get_public_address()
+        response = requests.get(f"https://{public_address}:8443", verify=False)
+        assert response.ok
+        content = json.loads(response.content)
+        assert content["status"] == "Success"
+        assert content["status_code"] == 200
+        assert content["error_code"] == 0
+
+    assert len(certificates) == 1, "Mismatched certificates between units"
+
+
+@pytest.mark.abort_on_fail
+async def test_cluster_state(ops_test: OpsTest):
+    """Test the Incus cluster state.
+
+    All units should be part of the Incus cluster and have an operational status.
+    """
+    assert ops_test.model, "No model found"
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+
+    unit = application.units[0]
+    action = await unit.run_action("cluster-list", format="yaml")
+    await action.fetch_output()
+    assert action.status == "completed", f"Action not completed: {action.results}"
+
+    assert "result" in action.results
+    result = yaml.safe_load(action.results.get("result"))
+
+    assert len(result) == len(application.units), "Not all units are part of the Incus cluster."
+    machines = [
+        ops_test.model.machines[machine] for machine in await ops_test.model.get_machines()
+    ]
+    machine_hostnames = [machine.hostname for machine in machines]
+    for member in result:
+        assert member["server_name"] in machine_hostnames
+        assert member["status"] == "Online"
+        assert member["message"] == "Fully operational"
+        assert member["failure_domain"] == "default"
 
 
 @pytest.mark.abort_on_fail
@@ -134,14 +169,14 @@ async def test_change_port(ops_test: OpsTest, port: int):
         timeout=OPERATION_TIMEOUT,
     )
 
-    unit = application.units[0]
-    public_address = await unit.get_public_address()
-    response = requests.get(f"https://{public_address}:{port}", verify=False)
-    assert response.ok
-    content = json.loads(response.content)
-    assert content["status"] == "Success"
-    assert content["status_code"] == 200
-    assert content["error_code"] == 0
+    for unit in application.units:
+        public_address = await unit.get_public_address()
+        response = requests.get(f"https://{public_address}:{port}", verify=False)
+        assert response.ok
+        content = json.loads(response.content)
+        assert content["status"] == "Success"
+        assert content["status_code"] == 200
+        assert content["error_code"] == 0
 
 
 @pytest.mark.abort_on_fail
@@ -167,17 +202,17 @@ async def test_add_trusted_certificate(ops_test: OpsTest, tmp_path: Path):
     ), f"Failed to create certificate. returncode={process.returncode} stdout={process.stdout} stderr={process.stderr}"
 
     # The certificate is not trusted
-    unit = application.units[0]
-    public_address = await unit.get_public_address()
-    response = requests.get(
-        f"https://{public_address}:8443/1.0", verify=False, cert=(cert_path, key_path)
-    )
-    assert response.ok
-    content = json.loads(response.content)
-    assert content["status"] == "Success"
-    assert content["status_code"] == 200
-    assert content["error_code"] == 0
-    assert content["metadata"]["auth"] == "untrusted"
+    for unit in application.units:
+        public_address = await unit.get_public_address()
+        response = requests.get(
+            f"https://{public_address}:8443/1.0", verify=False, cert=(cert_path, key_path)
+        )
+        assert response.ok
+        content = json.loads(response.content)
+        assert content["status"] == "Success"
+        assert content["status_code"] == 200
+        assert content["error_code"] == 0
+        assert content["metadata"]["auth"] == "untrusted"
 
     # Add the trusted certificate
     unit = application.units[0]
@@ -190,25 +225,25 @@ async def test_add_trusted_certificate(ops_test: OpsTest, tmp_path: Path):
     assert action.status == "completed", f"Action not completed: {action.results}"
 
     # The certificate is now trusted
-    unit = application.units[0]
-    public_address = await unit.get_public_address()
-    response = requests.get(
-        f"https://{public_address}:8443/1.0", verify=False, cert=(cert_path, key_path)
-    )
-    assert response.ok
-    content = json.loads(response.content)
-    assert content["status"] == "Success"
-    assert content["status_code"] == 200
-    assert content["error_code"] == 0
-    assert content["metadata"]["auth"] == "trusted"
+    for unit in application.units:
+        public_address = await unit.get_public_address()
+        response = requests.get(
+            f"https://{public_address}:8443/1.0", verify=False, cert=(cert_path, key_path)
+        )
+        assert response.ok
+        content = json.loads(response.content)
+        assert content["status"] == "Success"
+        assert content["status_code"] == 200
+        assert content["error_code"] == 0
+        assert content["metadata"]["auth"] == "trusted"
 
 
 @pytest.mark.abort_on_fail
 async def test_add_unit(ops_test: OpsTest, tmp_path: Path):
     """Test adding a new unit to the application.
 
-    The units should form a new Incus cluster and be remotely accessible
-    via the HTTPS API.
+    The new unit should join the existing Incus cluster and be remotely
+    accessible via the HTTPS API.
     """
     assert ops_test.model, "No model found"
 
@@ -218,7 +253,7 @@ async def test_add_unit(ops_test: OpsTest, tmp_path: Path):
     await ops_test.model.add_machine(
         constraints=constraints.parse("virt-type=virtual-machine mem=2G")
     )
-    await application.add_unit(to="1")
+    await application.add_unit(to="3")
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME],
         status="active",
@@ -226,40 +261,8 @@ async def test_add_unit(ops_test: OpsTest, tmp_path: Path):
         timeout=DEPLOY_TIMEOUT,
     )
 
-    # The units should be accessible and have the same certificate
-    certificates: Set[str] = set()
-    for unit in application.units:
-        certificate = await get_certificate_chain(ops_test, unit=unit, tmp_path=tmp_path)
-        certificates.add(certificate)
-        assert unit.workload_status_message == "Online: Fully operational"
-        cert_path = tmp_path / "cert.crt"
-        cert_path.write_text(certificate)
-        public_address = await unit.get_public_address()
-        response = requests.get(f"https://{public_address}:8443", verify=False)
-        assert response.ok
-        content = json.loads(response.content)
-        assert content["status"] == "Success"
-        assert content["status_code"] == 200
-        assert content["error_code"] == 0
-    assert len(certificates) == 1, "Mismatched certificates between units"
-
-    # The cluster should be operational
-    unit = application.units[0]
-    action = await unit.run_action("cluster-list", format="yaml")
-    await action.fetch_output()
-    assert action.status == "completed", f"Action not completed: {action.results}"
-    assert "result" in action.results
-    result = yaml.safe_load(action.results.get("result"))
-    assert len(result) == len(application.units), "Not all units are part of the Incus cluster."
-    machines = [
-        ops_test.model.machines[machine] for machine in await ops_test.model.get_machines()
-    ]
-    machine_hostnames = [machine.hostname for machine in machines]
-    for member in result:
-        assert member["server_name"] in machine_hostnames
-        assert member["status"] == "Online"
-        assert member["message"] == "Fully operational"
-        assert member["failure_domain"] == "default"
+    await test_workload_connectivity(ops_test, tmp_path)
+    await test_cluster_state(ops_test)
 
 
 @pytest.mark.abort_on_fail
@@ -273,11 +276,11 @@ async def test_create_instance(ops_test: OpsTest):
     application = ops_test.model.applications[APP_NAME]
     assert application, "Application not found in model"
 
-    # NOTE: we explicitly create the instance on the incus/1 unit because we'll
+    # NOTE: we explicitly create the instance on the incus/3 unit because we'll
     # remove it on the next test. This lets us more easily test the evacuation of
     # departing units
     unit = application.units[0]
-    target_node = ops_test.model.units["incus/1"].machine.hostname
+    target_node = ops_test.model.units["incus/3"].machine.hostname
     action = await unit.run(
         f"incus launch images:ubuntu/22.04 {TEST_INSTANCE_NAME} --vm --quiet --target {target_node}"
     )
@@ -310,8 +313,8 @@ async def test_remove_unit(ops_test: OpsTest, tmp_path: Path):
     assert application, "Application not found in model"
 
     # Remove the unit
-    removed_node = ops_test.model.units["incus/1"].machine.hostname
-    await ops_test.model.destroy_unit("incus/1")
+    removed_node = ops_test.model.units["incus/3"].machine.hostname
+    await ops_test.model.destroy_unit("incus/3")
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME],
         status="active",
@@ -319,8 +322,7 @@ async def test_remove_unit(ops_test: OpsTest, tmp_path: Path):
     )
 
     # The existing instance should have migrated to another node
-    unit = application.units[0]
-    action = await unit.run("incus ls --format json")
+    action = await application.units[0].run("incus ls --format json")
     await action.fetch_output()
     assert action.status == "completed", f"Action not completed: {action.results}"
     assert action.results["return-code"] == 0, f"Action failed: {action.results['stderr']}"
@@ -331,35 +333,30 @@ async def test_remove_unit(ops_test: OpsTest, tmp_path: Path):
     assert result[0]["type"] == "virtual-machine"
     assert result[0]["location"] != removed_node
 
-    # The unit should remain completely functional
-    certificate = await get_certificate_chain(ops_test, unit=unit, tmp_path=tmp_path)
-    assert unit.workload_status_message == "Online: Fully operational"
-    cert_path = tmp_path / "cert.crt"
-    cert_path.write_text(certificate)
-    public_address = await unit.get_public_address()
-    response = requests.get(f"https://{public_address}:8443", verify=False)
-    assert response.ok
-    content = json.loads(response.content)
-    assert content["status"] == "Success"
-    assert content["status_code"] == 200
-    assert content["error_code"] == 0
+    # The cluster should remain completely functional
+    await test_workload_connectivity(ops_test, tmp_path=tmp_path)
+    await test_cluster_state(ops_test)
 
 
 @pytest.mark.abort_on_fail
 async def test_reissue_certificates(ops_test: OpsTest, tmp_path: Path):
     """Test reissuing the certificates on Vault.
 
-    The unit should remain operational. The certificate should be updated on
-    the unit.
+    The cluster should remain operational. The certificate should be updated
+    on all cluster members.
     """
     assert ops_test.model, "No model found"
 
     application = ops_test.model.applications[APP_NAME]
     assert application, "Application not found in model"
-    unit = application.units[0]
 
-    # Get the current certificate
-    certificate = await get_certificate_chain(ops_test, unit=unit, tmp_path=tmp_path)
+    # Get the current certificates
+    certificates: Set[str] = set()
+    for unit in application.units:
+        certificate = await get_certificate_chain(ops_test, unit=unit, tmp_path=tmp_path)
+        certificates.add(certificate)
+    assert len(certificates) == 1, "Mismatched certificates between units"
+    certificate = certificates.pop()
 
     # Reissue the certificates
     action = await ops_test.model.units["vault/0"].run_action("reissue-certificates")
@@ -371,18 +368,17 @@ async def test_reissue_certificates(ops_test: OpsTest, tmp_path: Path):
         timeout=DEPLOY_TIMEOUT,
     )
 
-    # The unit should remain completely functional
-    assert unit.workload_status_message == "Online: Fully operational"
-    public_address = await unit.get_public_address()
-    response = requests.get(f"https://{public_address}:8443", verify=False)
-    assert response.ok
-    content = json.loads(response.content)
-    assert content["status"] == "Success"
-    assert content["status_code"] == 200
-    assert content["error_code"] == 0
+    # The cluster should remain completely functional
+    await test_workload_connectivity(ops_test, tmp_path=tmp_path)
+    await test_cluster_state(ops_test)
 
-    # Get the new certificate
-    new_certificate = await get_certificate_chain(ops_test, unit=unit, tmp_path=tmp_path)
+    # Get the new certificates
+    new_certificates: Set[str] = set()
+    for unit in application.units:
+        new_certificate = await get_certificate_chain(ops_test, unit=unit, tmp_path=tmp_path)
+        new_certificates.add(new_certificate)
+    assert len(new_certificates) == 1, "Mismatched certificates between units"
+    new_certificate = new_certificates.pop()
 
-    # Assert that the certificate changed
+    # Assert that the certificates changed
     assert new_certificate != certificate

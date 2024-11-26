@@ -6,9 +6,11 @@ default-base: ubuntu@22.04/stable
 applications:
   incus:
     charm: {{ charm_incus }}
-    num_units: 1
+    num_units: 3
     to:
       - 0
+      - 1
+      - 2
     bindings:
       "": alpha
   vault:
@@ -25,6 +27,10 @@ applications:
 
 machines:
   0:
+    constraints: virt-type=virtual-machine mem=2G
+  1:
+    constraints: virt-type=virtual-machine mem=2G
+  2:
     constraints: virt-type=virtual-machine mem=2G
 
 relations:
