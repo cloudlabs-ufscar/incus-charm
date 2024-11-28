@@ -321,3 +321,53 @@ def test_cluster_relation_changed_non_leader_not_clustered_no_token():
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
         ]
+
+
+def test_cluster_relation_changed_non_leader_certificate_not_applied():
+    """Test the cluster-relation-changed event on non leader units when the certificate is not yet applied.
+
+    The unit should not try to join the cluster. It should defer the event.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._node_name", "any-node-name"),
+        patch("charm.incus.bootstrap_node") as bootstrap_node,
+        patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.incus.get_server_certificate", return_value="any-default-certificate"),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            peers_data={
+                0: {"node-name": "leader-node-name"},
+                1: {"node-name": "any-node-name"},
+            },
+            local_app_data={
+                "tokens": '{"any-node-name": "any-join-token-secret-id"}',
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        certificates_relation = scenario.Relation(
+            endpoint="certificates",
+            interface="tls-certificates",
+            remote_units_data={
+                0: {
+                    "ca": "any-ca",
+                    "client.cert": "any-client-cert",
+                    "client.key": "any-client-key",
+                    "incus_0.server.cert": "any-server-cert",
+                    "incus_0.server.key": "any-server-key",
+                },
+            },
+        )
+        state = scenario.State(leader=False, relations={cluster_relation, certificates_relation})
+
+        out = ctx.run(ctx.on.relation_changed(relation=cluster_relation, remote_unit=1), state)
+
+        cluster_relation = out.get_relation(cluster_relation.id)
+        bootstrap_node.assert_not_called()
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+        ]
+        assert len(out.deferred) == 1

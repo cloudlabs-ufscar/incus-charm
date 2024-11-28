@@ -283,6 +283,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 incus.enable_clustering(self._node_name)
                 certificate = self.tls_certificates.certificate
                 if certificate:
+                    logger.info("Updating cluster certificate.")
                     incus.update_cluster_certificate(cert=certificate.cert, key=certificate.key)
 
             node_name = unit_data.node_name
@@ -307,6 +308,22 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 return
 
             node_name = self._node_name
+            if self.model.get_relation("certificates"):
+                certificate = self.tls_certificates.certificate
+                if not certificate:
+                    logger.info(
+                        "Certificate not yet emitted for this unit. Deferring event. node_name=%s",
+                        node_name,
+                    )
+                    return event.defer()
+
+                if certificate.cert != incus.get_server_certificate():
+                    logger.info(
+                        "Certificate not yet applied to unit. Deferring event. node_name=%s",
+                        node_name,
+                    )
+                    return event.defer()
+
             logger.debug(
                 "Checking if secret ID for join token is available in application data. node_name=%s app_data=%s",
                 node_name,
@@ -335,11 +352,20 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         """
         certificate = event.certificate
         logger.debug("Handling certificate changed event. certificate=%s", certificate)
+
         self.unit.status = ops.MaintenanceStatus("Applying certificate")
         logger.info("Applying certificate")
         incus.update_server_certificate(
             cert=certificate.cert, key=certificate.key, ca=certificate.ca
         )
+        if not incus.is_clustered():
+            logger.info("Unit is standalone. Will restart service to apply new certificate.")
+            self._restart_service(self.service_name)
+        elif self.unit.is_leader():
+            logger.debug(
+                "Unit is the cluster leader. Will apply certificate to all cluster members."
+            )
+            incus.update_cluster_certificate(cert=certificate.cert, key=certificate.key)
 
         # NOTE: put the certificate in the relation data so other units can
         # join the cluster using this certificate
@@ -348,18 +374,6 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             assert cluster_relation, "Cluster peer relation does not exist."
             cluster_relation.data[self.app]["cluster-certificate"] = certificate.cert
 
-        if not incus.is_clustered():
-            logger.debug(
-                "Unit is standalone. Will restart service to apply new certificate. certificate=%s",
-                certificate,
-            )
-            self._restart_service(self.service_name)
-        elif self.unit.is_leader():
-            logger.debug(
-                "Unit is the cluster leader. Will apply certificate to all cluster members. certificate=%s",
-                certificate,
-            )
-            incus.update_cluster_certificate(cert=certificate.cert, key=certificate.key)
         logger.info("Certificate applied")
 
     @data_models.validate_params(AddTrustedCertificateActionParams)
