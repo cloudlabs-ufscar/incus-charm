@@ -26,12 +26,14 @@ applications:
       totally-unsecure-auto-unlock: true
 
 machines:
+  # NOTE:since the machine 0 will also host the vault container, we need
+  # to have extra disk space for the lxd storage pool
   0:
-    constraints: virt-type=virtual-machine mem=2G
+    constraints: virt-type=virtual-machine mem=1G root-disk=20G
   1:
-    constraints: virt-type=virtual-machine mem=2G
+    constraints: virt-type=virtual-machine mem=1G
   2:
-    constraints: virt-type=virtual-machine mem=2G
+    constraints: virt-type=virtual-machine mem=1G
 
 relations:
   - - incus:certificates
