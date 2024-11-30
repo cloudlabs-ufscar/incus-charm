@@ -4,11 +4,13 @@
 
 """Charm the application."""
 
+import datetime
 import json
 import logging
 import socket
 from typing import Any, Dict, List, Optional, Union, cast
 
+import charmhelpers.contrib.storage.linux.ceph as ceph_client
 import charms.data_platform_libs.v0.data_models as data_models
 import charms.operator_libs_linux.v0.apt as apt
 import charms.operator_libs_linux.v1.systemd as systemd
@@ -28,12 +30,14 @@ class ClusterAppData(data_models.RelationDataModel):
 
     tokens: Dict[str, str]
     cluster_certificate: str
+    created_storage: List[incus.IncusStorageDriver]
 
 
 class ClusterUnitData(data_models.RelationDataModel):
     """The unit data in the cluster relation."""
 
     node_name: str
+    joined_cluster_at: Optional[str]
 
 
 class CephUnitData(data_models.RelationDataModel, extra="ignore"):
@@ -155,6 +159,24 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         if self.model.get_relation("certificates") and not self.tls_certificates.certificate:
             event.add_status(ops.WaitingStatus("Waiting for certificate"))
 
+        if self.model.get_relation("ceph"):
+            if not ceph.is_configured(self._ceph_user):
+                event.add_status(ops.WaitingStatus("Waiting for Ceph configuration on unit"))
+            cluster_relation = self.model.get_relation("cluster")
+            assert cluster_relation, "Cluster peer relation does not exist."
+            created_storage: List[incus.IncusStorageDriver] = []
+            try:
+                data = cast(ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app]))
+                created_storage = data.created_storage
+            except ValidationError as error:
+                logger.debug(
+                    "Could not validate application data when checking Ceph storage pool. error=%s",
+                    error,
+                )
+            else:
+                if "ceph" not in created_storage:
+                    event.add_status(ops.WaitingStatus("Waiting for Ceph storage pool creation"))
+
         is_clustered = incus.is_clustered()
         if not self.unit.is_leader() and not is_clustered:
             event.add_status(ops.WaitingStatus("Waiting for cluster token"))
@@ -266,6 +288,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         if not self.model.get_relation("certificates"):
             event.relation.data[event.app]["cluster-certificate"] = incus.get_server_certificate()
         event.relation.data[event.app]["tokens"] = json.dumps({})
+        event.relation.data[event.app]["created-storage"] = json.dumps([])
 
     @data_models.parse_relation_data(app_model=ClusterAppData, unit_model=ClusterUnitData)
     def on_cluster_relation_changed(
@@ -277,7 +300,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         """Handle cluster-relation-changed event.
 
         The leader unit enables clustering in the Incus instance if it is not
-        already enables. It also generates a join token for the remote unit that
+        already enabled. It also generates a join token for the remote unit that
         triggered the event if one does not already exist.
 
         Non leader units get the token from the relation data and use it to join
@@ -287,20 +310,20 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         # to declare `self` as `ops.CharmBase` and then cast it back to `IncusCharm`.
         self = cast(IncusCharm, self)
         if app_data is None:
-            logger.warning("No app data available. event=%s", event)
+            logger.debug("No app data available. event=%s", event)
             return
         if isinstance(app_data, ValidationError):
-            logger.warning("Invalid app data. event=%s validation_error=%s", event, str(app_data))
+            logger.debug("Invalid app data. event=%s validation_error=%s", event, str(app_data))
             return
 
         event.relation.data[self.unit]["node-name"] = self._node_name
 
         if self.unit.is_leader():
             if unit_data is None:
-                logger.warning("No unit data available. event=%s", event)
+                logger.debug("No unit data available. event=%s", event)
                 return
             if isinstance(unit_data, ValidationError):
-                logger.warning(
+                logger.debug(
                     "Invalid unit data. event=%s validation_error=%s", event, str(unit_data)
                 )
                 return
@@ -313,7 +336,12 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 if certificate:
                     logger.info("Updating cluster certificate.")
                     incus.update_cluster_certificate(cert=certificate.cert, key=certificate.key)
+                event.relation.data[self.unit]["joined-cluster-at"] = datetime.datetime.now(
+                    datetime.timezone.utc
+                ).isoformat()
+                logger.info("Enabled clustering. node_name=%s", self._node_name)
 
+            # TODO: check if unit already joined cluster and delete token secret
             node_name = unit_data.node_name
             if node_name in app_data.tokens:
                 logger.debug("Token already generated for node. node_name=%s", node_name)
@@ -332,10 +360,44 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             event.relation.data[event.app]["tokens"] = json.dumps(app_data.tokens)
             logger.info("Join token created.")
         else:
+            node_name = self._node_name
             if incus.is_clustered():
                 return
 
-            node_name = self._node_name
+            logger.debug(
+                "Checking if secret ID for join token is available in application data. node_name=%s app_data=%s",
+                node_name,
+                app_data,
+            )
+            secret_id = app_data.tokens.get(node_name)
+            if not secret_id:
+                logger.debug("Secret ID not found in application data.")
+                return
+
+            # NOTE: if a ceph relation exists, we expect that eventually a Ceph
+            # storage pool will be created on the cluster. If either ceph is not
+            # configured on the unit or the leader unit has not yet created the
+            # ceph pool and signaled it via the application data, we defer the
+            # event. This avoids race conditions and ensures that all members will
+            # be able to join the cluster and configure the Ceph storage pool.
+            if self.model.get_relation("ceph"):
+                if not ceph.is_configured(self._ceph_user):
+                    logger.info(
+                        "Ceph is not configured on unit. Deferring event. node_name=%s", node_name
+                    )
+                    return event.defer()
+                if "ceph" not in app_data.created_storage:
+                    logger.info(
+                        "Ceph storage pool is not created on the cluster. Deferring event. node_name=%s",
+                        node_name,
+                    )
+                    return event.defer()
+
+            # NOTE: if a certificate relation exists, we expect that eventually
+            # a certificate will be issued and applied to the unit. If the
+            # certificate either is not issued or not applied yet, we defer the
+            # event. This ensures that the local Incus daemon will have the
+            # certificate applied before joining the cluster.
             if self.model.get_relation("certificates"):
                 certificate = self.tls_certificates.certificate
                 if not certificate:
@@ -352,16 +414,6 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                     )
                     return event.defer()
 
-            logger.debug(
-                "Checking if secret ID for join token is available in application data. node_name=%s app_data=%s",
-                node_name,
-                app_data,
-            )
-            secret_id = app_data.tokens.get(node_name)
-            if not secret_id:
-                logger.debug("Secret ID not found in application data.")
-                return
-
             logger.info(
                 "Secret ID found in app data. Will fetch token from it and join the cluster. secret_id=%s",
                 secret_id,
@@ -372,6 +424,10 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             assert token, "Join token secret has an invalid content."
             cluster_certificate = app_data.cluster_certificate
             self._bootstrap_incus(join_token=token, cluster_certificate=cluster_certificate)
+            logger.info("Joined cluster. node_name=%s", self._node_name)
+            event.relation.data[self.unit]["joined-cluster-at"] = datetime.datetime.now(
+                datetime.timezone.utc
+            ).isoformat()
 
     def on_certificate_changed(self, event: tls_certificates.CertificateChangedEvent):
         """Handle certificate-changed event.
@@ -445,10 +501,10 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         """
         self = cast(IncusCharm, self)
         if unit_data is None:
-            logger.warning("No unit data available. event=%s", event)
+            logger.debug("No unit data available. event=%s", event)
             return
         if isinstance(unit_data, ValidationError):
-            logger.warning("Invalid unit data. event=%s validation_error=%s", event, str(app_data))
+            logger.debug("Invalid unit data. event=%s validation_error=%s", event, str(unit_data))
             return
 
         logger.debug(
@@ -468,18 +524,103 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             event.relation.data,
         )
 
-        ceph_user = self.app.name
         self.unit.status = ops.MaintenanceStatus("Updating Ceph configuration files")
         logger.info(
             "Writing data from relation into ceph config files. ceph_addresses=%s ceph_user=%s",
             ceph_addresses,
-            ceph_user,
+            self._ceph_user,
         )
-        ceph.write_keyring_file(ceph_user=ceph_user, key=unit_data.key)
+        ceph.write_keyring_file(ceph_user=self._ceph_user, key=unit_data.key)
         ceph.write_ceph_conf_file(ceph_addresses)
-        # TODO: create the ceph storage pool on all nodes. This will require some
-        # coordination between units... or we can just create all of them in the
-        # leader unit, avoiding any coordination!!
+
+        if not self.unit.is_leader():
+            return
+
+        # TODO: make Ceph storage pool parameters configurable
+        ceph_pool_name = "incus"
+        request = ceph_client.CephBrokerRq()
+        request.add_op_create_replicated_pool(
+            name=ceph_pool_name, replica_count=3, app_name=self._ceph_user
+        )
+        if ceph_client.is_request_complete(request):
+            cluster_relation = self.model.get_relation("cluster")
+            assert cluster_relation, "Cluster peer relation does not exist."
+            created_storage: List[incus.IncusStorageDriver] = []
+            try:
+                data = cast(ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app]))
+                created_storage = data.created_storage
+            except ValidationError as error:
+                logger.debug(
+                    "Could not validate application data when creating Ceph storage pool. Deferring the event. error=%s",
+                    error,
+                )
+                return event.defer()
+
+            if "ceph" in created_storage:
+                logger.info(
+                    "A Ceph storage pool is already present in the Incus cluster. Skipping storage pool creation."
+                )
+                return
+
+            self.unit.status = ops.MaintenanceStatus("Creating Ceph storage pool on Incus")
+            self._create_ceph_storage_pool(ceph_pool_name, self._ceph_user)
+            created_storage.append("ceph")
+            cluster_relation.data[self.app]["created-storage"] = json.dumps(created_storage)
+        else:
+            self.unit.status = ops.MaintenanceStatus("Requesting Ceph pool creation")
+            logger.info("Will request ceph-mon to create a Ceph OSD pool for Incus")
+            ceph_client.send_request_if_needed(request)
+
+    def _create_ceph_storage_pool(self, ceph_pool_name: str, ceph_user: str):
+        """Create a Ceph storage pool in the Incus cluster."""
+        logger.info(
+            "Creating Ceph storage pool. ceph_pool_name=%s ceph_user=%s", ceph_pool_name, ceph_user
+        )
+        if not incus.is_clustered():
+            incus.create_storage(
+                pool_name="ceph",
+                storage_driver="ceph",
+                source=ceph_pool_name,
+                pool_config={"ceph.user.name": ceph_user},
+            )
+            logger.info("Ceph storage pool created.")
+            return
+
+        logger.info("Will create pending storage pool on all cluster nodes.")
+        cluster_relation = self.model.get_relation("cluster")
+        assert cluster_relation, "Cluster peer relation does not exist."
+        for unit in [*cluster_relation.units, self.unit]:
+            try:
+                data = cast(ClusterUnitData, ClusterUnitData.read(cluster_relation.data[unit]))
+            except ValidationError as error:
+                logger.debug(
+                    "Could not validate unit data when creating Ceph storage pool. unit=%s error=%s",
+                    unit,
+                    error,
+                )
+                continue
+
+            node_name = data.node_name
+            if not data.joined_cluster_at:
+                logger.info(
+                    "Unit has not yet joined the cluster. Skipping ceph storage pool creation on node. node_name=%s",
+                    data.node_name,
+                )
+                continue
+
+            logger.info("Creating Ceph storage pool on Incus node. node_name=%s", node_name)
+            incus.create_storage(
+                pool_name="ceph",
+                storage_driver="ceph",
+                source=ceph_pool_name,
+                target=node_name,
+            )
+            logger.info("Ceph storage pool created on node. node_name=%s", node_name)
+        logger.info("Instantiating Ceph storage pool across the cluster.")
+        incus.create_storage(
+            pool_name="ceph", storage_driver="ceph", pool_config={"ceph.user.name": ceph_user}
+        )
+        logger.info("Ceph storage pool created.")
 
     @data_models.validate_params(AddTrustedCertificateActionParams)
     def add_trusted_certificate_action(
@@ -563,6 +704,10 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         if "-" in package_version:
             return package_version.split("-")[0]
         return package_version
+
+    @property
+    def _ceph_user(self) -> str:
+        return self.app.name
 
     def _install_packages(self, *packages: str):
         """Install the specified `packages` on the system."""

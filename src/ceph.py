@@ -67,3 +67,10 @@ def write_ceph_conf_file(ceph_addresses: Set[str], ceph_dir=CEPH_DIR):
     logger.debug(
         "Wrote Ceph config file. file=%s ceph_addresses=%s", ceph_conf_path, ceph_addresses
     )
+
+
+def is_configured(ceph_user: str, ceph_dir=CEPH_DIR) -> bool:
+    """Check if the required Ceph config files are present in the system."""
+    ceph_conf_path = ceph_dir / "ceph.conf"
+    keyring_path = ceph_dir / f"ceph.client.{ceph_user}.keyring"
+    return ceph_conf_path.exists() and keyring_path.exists()

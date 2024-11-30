@@ -6,7 +6,7 @@ import subprocess
 from enum import Enum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 
 import yaml
 from pydantic import BaseModel
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 CLIFormats = Literal["csv", "json", "table", "yaml", "compact"]
+IncusStorageDriver = Literal["dir", "btrfs", "zfs", "ceph"]
 
 INCUS_VAR_DIR = Path("/var/lib/incus")
 
@@ -146,6 +147,29 @@ def get_server_certificate() -> str:
     cert_path = INCUS_VAR_DIR / "server.crt"
     assert cert_path.exists(), f"Certificate file does not exist. cert_path={cert_path}"
     return cert_path.read_text().strip()
+
+
+def create_storage(
+    pool_name: str,
+    storage_driver: IncusStorageDriver,
+    source: Optional[str] = None,
+    target: Optional[str] = None,
+    pool_config: Optional[Dict[str, str]] = None,
+):
+    """Create a storage pool in Incus.
+
+    Driver-specific parameters can be specified in `pool_config`.
+    """
+    args = ["storage", "create", pool_name, storage_driver]
+    if source:
+        args.append(f"source={source}")
+    if pool_config:
+        for name, value in pool_config.items():
+            args.append(f"{name}={value}")
+    if target:
+        args.extend(["--target", target])
+
+    run_command(*args)
 
 
 def run_command(*args: str, input: Optional[str] = None) -> str:

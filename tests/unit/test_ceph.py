@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from ceph import write_keyring_file
-from src.ceph import write_ceph_conf_file
+import pytest
+
+from src.ceph import is_configured, write_ceph_conf_file, write_keyring_file
 
 
 def test_write_keyring_file(tmp_path: Path):
@@ -84,3 +85,26 @@ mon host = 10.18.196.157 10.18.196.162 10.18.196.2""".strip()
     write_ceph_conf_file({"10.0.0.1", "10.0.0.2"}, ceph_dir=ceph_dir)
     assert conf_file.exists()
     assert conf_file.read_text() == existing_content
+
+
+@pytest.mark.parametrize(
+    "keyring_exists,ceph_conf_exists", [(False, False), (True, False), (False, True)]
+)
+def test_is_configured_missing_files(keyring_exists: bool, ceph_conf_exists: bool, tmp_path: Path):
+    ceph_dir = tmp_path / "ceph"
+    ceph_dir.mkdir(parents=True)
+    if keyring_exists:
+        (ceph_dir / "ceph.client.incus.keyring").touch()
+    if ceph_conf_exists:
+        (ceph_dir / "ceph.conf").touch()
+
+    assert not is_configured("incus", ceph_dir=ceph_dir)
+
+
+def test_is_configured_files_exist(tmp_path: Path):
+    ceph_dir = tmp_path / "ceph"
+    ceph_dir.mkdir(parents=True)
+    (ceph_dir / "ceph.client.incus.keyring").touch()
+    (ceph_dir / "ceph.conf").touch()
+
+    assert is_configured("incus", ceph_dir=ceph_dir)

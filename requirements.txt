@@ -1,2 +1,5 @@
 ops ~= 2.8
 pydantic ~= 1.10
+charmhelpers ~= 1.2
+setuptools ~= 75.6
+netifaces ~= 0.11

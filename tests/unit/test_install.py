@@ -60,7 +60,11 @@ def test_install_with_ceph_relation(leader, is_clustered):
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(
-            leader=leader, relations=[scenario.Relation(endpoint="ceph", interface="ceph-client")]
+            leader=leader,
+            relations=[
+                scenario.Relation(endpoint="ceph", interface="ceph-client"),
+                scenario.PeerRelation(endpoint="cluster"),
+            ],
         )
 
         out = ctx.run(ctx.on.install(), state)

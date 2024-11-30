@@ -24,17 +24,41 @@ applications:
     options:
       auto-generate-root-ca-cert: true
       totally-unsecure-auto-unlock: true
+  ceph-osd:
+    charm: ceph-osd
+    channel: latest/edge
+    num_units: 3
+    to:
+      - 0
+      - 1
+      - 2
+    bindings:
+      "": alpha
+    storage:
+      osd-devices: loop,5G,1
+  ceph-mon:
+    charm: ceph-mon
+    channel: latest/edge
+    num_units: 3
+    to:
+      - 0
+      - 1
+      - 2
+    bindings:
+      "": alpha
 
 machines:
-  # NOTE:since the machine 0 will also host the vault container, we need
-  # to have extra disk space for the lxd storage pool
   0:
-    constraints: virt-type=virtual-machine mem=1G root-disk=20G
+    constraints: virt-type=virtual-machine mem=1536M root-disk=20G
   1:
-    constraints: virt-type=virtual-machine mem=1G
+    constraints: virt-type=virtual-machine mem=1536M root-disk=20G
   2:
-    constraints: virt-type=virtual-machine mem=1G
+    constraints: virt-type=virtual-machine mem=1536M root-disk=20G
 
 relations:
   - - incus:certificates
     - vault:certificates
+  - - ceph-osd:mon
+    - ceph-mon:osd
+  - - incus:ceph
+    - ceph-mon:client

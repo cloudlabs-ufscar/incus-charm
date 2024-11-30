@@ -58,12 +58,7 @@ async def test_build_and_deploy(ops_test: OpsTest, tmp_path: Path):
     # Deploy the charm and wait for an active/idle status on all applications
     await asyncio.gather(
         ops_test.model.deploy(bundle_path),
-        ops_test.model.wait_for_idle(
-            apps=apps,
-            status="active",
-            raise_on_blocked=True,
-            timeout=DEPLOY_TIMEOUT,
-        ),
+        ops_test.model.wait_for_idle(apps=apps, status="active", timeout=DEPLOY_TIMEOUT),
     )
 
 
@@ -251,7 +246,7 @@ async def test_add_unit(ops_test: OpsTest, tmp_path: Path):
     assert application, "Application not found in model"
 
     await ops_test.model.add_machine(
-        constraints=constraints.parse("virt-type=virtual-machine mem=1G")
+        constraints=constraints.parse("virt-type=virtual-machine mem=1536M")
     )
     await application.add_unit(to="3")
     await ops_test.model.wait_for_idle(

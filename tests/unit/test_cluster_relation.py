@@ -14,8 +14,8 @@ from charm import IncusCharm
 def test_cluster_relation_created_leader_no_certificate():
     """Test the cluster-relation-created event on leader units.
 
-    The unit should create the dictionary of join tokens and put its
-    certificate on the relation data.
+    The unit should create the dictionary of join tokens, the list of created
+    storage and put its certificate on the relation data.
     """
     with (
         patch("charm.IncusCharm._package_installed", True),
@@ -31,13 +31,15 @@ def test_cluster_relation_created_leader_no_certificate():
 
         relation = out.get_relation(relation.id)
         assert relation.local_app_data["tokens"] == "{}"
+        assert relation.local_app_data["created-storage"] == "[]"
         assert relation.local_app_data["cluster-certificate"] == "any-certificate"
 
 
 def test_cluster_relation_created_leader():
     """Test the cluster-relation-created event on leader units.
 
-    The unit should create the dictionary of join tokens.
+    The unit should create the dictionary of join tokens and the list of
+    created storage.
     """
     with (
         patch("charm.IncusCharm._package_installed", True),
@@ -66,6 +68,7 @@ def test_cluster_relation_created_leader():
 
         cluster_relation = out.get_relation(cluster_relation.id)
         assert cluster_relation.local_app_data["tokens"] == "{}"
+        assert cluster_relation.local_app_data["created-storage"] == "[]"
         get_server_certificate.assert_not_called()
 
 
@@ -88,7 +91,11 @@ def test_cluster_relation_changed_leader_not_clustered():
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={1: {"node-name": "peer-node-name"}},
-            local_app_data={"tokens": "{}", "cluster-certificate": "any-cluster-certificate"},
+            local_app_data={
+                "tokens": "{}",
+                "created-storage": "[]",
+                "cluster-certificate": "any-cluster-certificate",
+            },
         )
         state = scenario.State(leader=True, relations={relation})
 
@@ -104,6 +111,7 @@ def test_cluster_relation_changed_leader_not_clustered():
             scenario.MaintenanceStatus("Enabling clustering"),
             scenario.MaintenanceStatus("Creating join token for peer-node-name"),
         ]
+        assert "joined-cluster-at" in relation.local_unit_data
 
 
 def test_cluster_relation_changed_leader_clustered():
@@ -126,7 +134,11 @@ def test_cluster_relation_changed_leader_clustered():
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={1: {"node-name": "peer-node-name"}},
-            local_app_data={"tokens": "{}", "cluster-certificate": "any-cluster-certificate"},
+            local_app_data={
+                "tokens": "{}",
+                "created-storage": "[]",
+                "cluster-certificate": "any-cluster-certificate",
+            },
         )
         state = scenario.State(leader=True, relations={relation})
 
@@ -169,6 +181,7 @@ def test_cluster_relation_changed_leader_existing_tokens():
             },
             local_app_data={
                 "tokens": '{"peer-node-name": "any-join-token-secret-id"}',
+                "created-storage": "[]",
                 "cluster-certificate": "any-cluster-certificate",
             },
         )
@@ -215,6 +228,7 @@ def test_cluster_relation_changed_non_leader_not_clustered():
             },
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
+                "created-storage": "[]",
                 "cluster-certificate": "any-cluster-certificate",
             },
         )
@@ -235,9 +249,8 @@ def test_cluster_relation_changed_non_leader_not_clustered():
             },
         )
 
-        out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+        ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
 
-        relation = out.get_relation(relation.id)
         bootstrap_node.assert_called_once()
         assert bootstrap_node.call_args.args[0]["cluster"] == {
             "enabled": True,
@@ -249,6 +262,7 @@ def test_cluster_relation_changed_non_leader_not_clustered():
             scenario.UnknownStatus(),
             scenario.MaintenanceStatus("Bootstrapping Incus"),
         ]
+        assert "joined-cluster-at" in relation.local_unit_data
 
 
 def test_cluster_relation_changed_non_leader_clustered():
@@ -273,14 +287,14 @@ def test_cluster_relation_changed_non_leader_clustered():
             },
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
+                "created-storage": "[]",
                 "cluster-certificate": "any-cluster-certificate",
             },
         )
         state = scenario.State(leader=False, relations={relation})
 
-        out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+        ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
 
-        relation = out.get_relation(relation.id)
         bootstrap_node.assert_not_called()
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
@@ -309,14 +323,14 @@ def test_cluster_relation_changed_non_leader_not_clustered_no_token():
             },
             local_app_data={
                 "tokens": "{}",
+                "created-storage": "[]",
                 "cluster-certificate": "any-cluster-certificate",
             },
         )
         state = scenario.State(leader=False, relations={relation})
 
-        out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+        ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
 
-        relation = out.get_relation(relation.id)
         bootstrap_node.assert_not_called()
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
@@ -345,6 +359,7 @@ def test_cluster_relation_changed_non_leader_certificate_not_applied():
             },
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
+                "created-storage": "[]",
                 "cluster-certificate": "any-cluster-certificate",
             },
         )
@@ -365,9 +380,175 @@ def test_cluster_relation_changed_non_leader_certificate_not_applied():
 
         out = ctx.run(ctx.on.relation_changed(relation=cluster_relation, remote_unit=1), state)
 
-        cluster_relation = out.get_relation(cluster_relation.id)
         bootstrap_node.assert_not_called()
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
         ]
         assert len(out.deferred) == 1
+
+
+def test_cluster_relation_changed_non_leader_ceph_not_configured():
+    """Test the cluster-relation-changed event on non leader units when Ceph is not configured.
+
+    The unit should not try to join the cluster when Ceph is not configured. It
+    should defer the event.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._node_name", "any-node-name"),
+        patch("charm.incus.bootstrap_node") as bootstrap_node,
+        patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.ceph.is_configured", return_value=False),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            peers_data={
+                0: {"node-name": "leader-node-name"},
+                1: {"node-name": "any-node-name"},
+            },
+            local_app_data={
+                "tokens": '{"any-node-name": "any-join-token-secret-id"}',
+                "created-storage": "[]",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        state = scenario.State(
+            leader=False,
+            relations={relation, scenario.Relation(endpoint="ceph")},
+            networks=[
+                scenario.Network(
+                    binding_name="cluster",
+                    bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
+                )
+            ],
+            config={"cluster_port": 8888},
+            secrets={
+                scenario.Secret(
+                    id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
+                )
+            },
+        )
+
+        out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+
+        bootstrap_node.assert_not_called()
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+        ]
+        assert len(out.deferred) == 1
+
+
+def test_cluster_relation_changed_non_leader_ceph_pool_not_created():
+    """Test the cluster-relation-changed event on non leader units when the Ceph pool is not created.
+
+    The unit should not try to join the cluster when the Ceph pool is not created. It
+    should defer the event.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._node_name", "any-node-name"),
+        patch("charm.incus.bootstrap_node") as bootstrap_node,
+        patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.ceph.is_configured", return_value=True),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            peers_data={
+                0: {"node-name": "leader-node-name"},
+                1: {"node-name": "any-node-name"},
+            },
+            local_app_data={
+                "tokens": '{"any-node-name": "any-join-token-secret-id"}',
+                "created-storage": "[]",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        state = scenario.State(
+            leader=False,
+            relations={relation, scenario.Relation(endpoint="ceph")},
+            networks=[
+                scenario.Network(
+                    binding_name="cluster",
+                    bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
+                )
+            ],
+            config={"cluster_port": 8888},
+            secrets={
+                scenario.Secret(
+                    id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
+                )
+            },
+        )
+
+        out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+
+        bootstrap_node.assert_not_called()
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+        ]
+        assert len(out.deferred) == 1
+
+
+def test_cluster_relation_changed_non_leader_ceph_pool_created():
+    """Test the cluster-relation-changed event on non leader units when the Ceph pool is created.
+
+    The unit should use the secret ID from the relation to retrieve the join token
+    from the secret. The token should then be used to bootstrap Incus and join the
+    cluster.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._node_name", "any-node-name"),
+        patch("charm.incus.bootstrap_node") as bootstrap_node,
+        patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.ceph.is_configured", return_value=True),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            peers_data={
+                0: {"node-name": "leader-node-name"},
+                1: {"node-name": "any-node-name"},
+            },
+            local_app_data={
+                "tokens": '{"any-node-name": "any-join-token-secret-id"}',
+                "created-storage": '["ceph"]',
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        state = scenario.State(
+            leader=False,
+            relations={relation, scenario.Relation(endpoint="ceph")},
+            networks=[
+                scenario.Network(
+                    binding_name="cluster",
+                    bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
+                )
+            ],
+            config={"cluster_port": 8888},
+            secrets={
+                scenario.Secret(
+                    id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
+                )
+            },
+        )
+
+        ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+
+        bootstrap_node.assert_called_once()
+        assert bootstrap_node.call_args.args[0]["cluster"] == {
+            "enabled": True,
+            "cluster_token": "any-join-token",
+            "server_address": "10.0.0.2:8888",
+            "cluster_certificate": "any-cluster-certificate",
+        }
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+            scenario.MaintenanceStatus("Bootstrapping Incus"),
+        ]
+        assert "joined-cluster-at" in relation.local_unit_data
