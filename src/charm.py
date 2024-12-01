@@ -55,6 +55,8 @@ class IncusConfig(data_models.BaseConfigModel):
     cluster_port: int
     metrics_port: int
     ceph_rbd_features: str
+    package_repository: str
+    package_repository_gpg_key: str
 
     @validator("server_port", "cluster_port", "metrics_port")
     @classmethod
@@ -202,10 +204,9 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         to Ceph is present, also installs packages for communicating with Ceph.
         """
         self.unit.status = ops.MaintenanceStatus("Installing packages")
-        # TODO: make the repository and gpg key configurable
         self._add_apt_repository(
-            repository_line="deb https://pkgs.zabbly.com/incus/stable jammy main",
-            gpg_key_url="https://pkgs.zabbly.com/key.asc",
+            repository_line=self.config.package_repository,
+            gpg_key_url=self.config.package_repository_gpg_key,
         )
 
         packages = [self.package_name]

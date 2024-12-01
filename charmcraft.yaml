@@ -81,6 +81,20 @@ config:
         https://docs.ceph.com/en/latest/man/8/rbd/#cmdoption-rbd-image-feature
       default: layering
       type: string
+    package-repository:
+      description: |
+        A full source list entry to define an extra package repository.
+
+        A complete reference for the format of the source list entry
+        is available at https://wiki.debian.org/SourcesList.
+      default: deb https://pkgs.zabbly.com/incus/stable jammy main
+      type: string
+    package-repository-gpg-key:
+      description: |
+        An optional URL from which to download the GPG key used to verify the
+        package signatures in the repository specified in `package-repository`.
+      default: https://pkgs.zabbly.com/key.asc
+      type: string
 
 actions:
   add-trusted-certificate:

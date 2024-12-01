@@ -75,3 +75,35 @@ def test_install_with_ceph_relation(leader, is_clustered):
             gpg_key_url="https://pkgs.zabbly.com/key.asc",
         )
         install_packages.assert_called_once_with("incus", "ceph-common")
+
+
+def test_install_repository_config():
+    """Test the install event for the repository config.
+
+    The unit should add the APT repository and install the incus package.
+    """
+    with (
+        patch("charm.IncusCharm._add_apt_repository") as add_apt_repository,
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._install_packages") as install_packages,
+        patch("charm.IncusCharm._package_version", "any-version"),
+        patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.incus.get_cluster_member_info"),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            leader=True,
+            config={
+                "package-repository": "any-package-repository",
+                "package-repository-gpg-key": "any-package-repository-gpg-key",
+            },
+        )
+
+        out = ctx.run(ctx.on.install(), state)
+
+        assert out.workload_version == "any-version"
+        add_apt_repository.assert_called_once_with(
+            repository_line="any-package-repository",
+            gpg_key_url="any-package-repository-gpg-key",
+        )
+        install_packages.assert_called_once_with("incus")
