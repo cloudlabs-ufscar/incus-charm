@@ -22,7 +22,7 @@ from pytest_operator.plugin import OpsTest
 logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
-DEPLOY_TIMEOUT = 30 * 60  # 30min
+DEPLOY_TIMEOUT = 45 * 60  # 45min
 OPERATION_TIMEOUT = 60  # 1min
 APP_NAME = METADATA["name"]
 BUNDLE_FILENAME = Path("tests/integration/bundles/incus_clustered.yaml.j2").absolute()
@@ -145,6 +145,52 @@ async def test_cluster_state(ops_test: OpsTest):
 
 
 @pytest.mark.abort_on_fail
+async def test_storage_pool(ops_test: OpsTest):
+    """Test the configured storage pools.
+
+    All units should have a local Btrfs and a Ceph storage pool.
+    """
+    assert ops_test.model, "No model found"
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+    for unit in application.units:
+        # HACK: Incus's first command always outputs a help message that breaks
+        # output parsing. To bypass this, we always run a dummy command first.
+        await ops_test.juju(*f"exec --unit {unit.name} -- incus info".split())
+        result_code, stdout, stderr = await ops_test.juju(
+            *f"exec --unit {unit.name} -- incus query /1.0/storage-pools?recursion=1".split()
+        )
+
+        assert result_code == 0, stderr
+        assert stderr == ""
+        assert stdout
+
+        storage_pools = json.loads(stdout)
+        assert len(storage_pools) == 2
+
+        btrfs_storage_pools = [pool for pool in storage_pools if pool["driver"] == "btrfs"]
+        assert len(btrfs_storage_pools) == 1
+        btrfs_storage_pool = btrfs_storage_pools[0]
+        assert btrfs_storage_pool["name"] == "default"
+        assert btrfs_storage_pool["status"] == "Created"
+        assert len(btrfs_storage_pool["locations"]) == len(
+            application.units
+        ), "Storage pool not created on all cluster members"
+
+        ceph_storage_pools = [pool for pool in storage_pools if pool["driver"] == "ceph"]
+        assert len(ceph_storage_pools) == 1
+        ceph_storage_pool = ceph_storage_pools[0]
+        assert ceph_storage_pool["name"] == "ceph"
+        assert ceph_storage_pool["status"] == "Created"
+        assert len(ceph_storage_pool["locations"]) == len(
+            application.units
+        ), "Storage pool not created on all cluster members"
+        assert ceph_storage_pool["config"]["ceph.osd.pool_name"] == "incus"
+        assert ceph_storage_pool["config"]["ceph.user.name"] == "incus"
+
+
+@pytest.mark.abort_on_fail
 @pytest.mark.parametrize("port", (8888, 8443))
 async def test_change_port(ops_test: OpsTest, port: int):
     """Test changing the server port via a config option.
@@ -258,6 +304,7 @@ async def test_add_unit(ops_test: OpsTest, tmp_path: Path):
 
     await test_workload_connectivity(ops_test, tmp_path)
     await test_cluster_state(ops_test)
+    await test_storage_pool(ops_test)
 
 
 @pytest.mark.abort_on_fail
@@ -331,6 +378,7 @@ async def test_remove_unit(ops_test: OpsTest, tmp_path: Path):
     # The cluster should remain completely functional
     await test_workload_connectivity(ops_test, tmp_path=tmp_path)
     await test_cluster_state(ops_test)
+    await test_storage_pool(ops_test)
 
 
 @pytest.mark.abort_on_fail
@@ -366,6 +414,7 @@ async def test_reissue_certificates(ops_test: OpsTest, tmp_path: Path):
     # The cluster should remain completely functional
     await test_workload_connectivity(ops_test, tmp_path=tmp_path)
     await test_cluster_state(ops_test)
+    await test_storage_pool(ops_test)
 
     # Get the new certificates
     new_certificates: Set[str] = set()
