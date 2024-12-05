@@ -329,17 +329,10 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 return
 
             if not incus.is_clustered():
-                self.unit.status = ops.MaintenanceStatus("Enabling clustering")
-                logger.info("Node has not enabled clustering. Will enable it.")
-                incus.enable_clustering(self._node_name)
-                certificate = self.tls_certificates.certificate
-                if certificate:
-                    logger.info("Updating cluster certificate.")
-                    incus.update_cluster_certificate(cert=certificate.cert, key=certificate.key)
+                self._enable_clustering()
                 event.relation.data[self.unit]["joined-cluster-at"] = datetime.datetime.now(
                     datetime.timezone.utc
                 ).isoformat()
-                logger.info("Enabled clustering. node_name=%s", self._node_name)
 
             # TODO: check if unit already joined cluster and delete token secret
             node_name = unit_data.node_name
@@ -347,18 +340,9 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 logger.debug("Token already generated for node. node_name=%s", node_name)
                 return
 
-            self.unit.status = ops.MaintenanceStatus(f"Creating join token for {node_name}")
-            logger.info(
-                "Creating join token for unit. unit=%s node_name=%s",
-                event.unit,
-                node_name,
-            )
-            join_token = incus.create_join_token(node_name)
-            secret = self.app.add_secret({"token": join_token}, label=f"{node_name}-join-token")
-            assert secret.id, f"Generated secret does not have a valid ID. secret={secret}"
-            app_data.tokens[node_name] = secret.id
+            secret_id = self._create_join_token(node_name)
+            app_data.tokens[node_name] = secret_id
             event.relation.data[event.app]["tokens"] = json.dumps(app_data.tokens)
-            logger.info("Join token created.")
         else:
             node_name = self._node_name
             if incus.is_clustered():
@@ -374,45 +358,18 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 logger.debug("Secret ID not found in application data.")
                 return
 
-            # NOTE: if a ceph relation exists, we expect that eventually a Ceph
-            # storage pool will be created on the cluster. If either ceph is not
-            # configured on the unit or the leader unit has not yet created the
-            # ceph pool and signaled it via the application data, we defer the
-            # event. This avoids race conditions and ensures that all members will
-            # be able to join the cluster and configure the Ceph storage pool.
-            if self.model.get_relation("ceph"):
-                if not ceph.is_configured(self._ceph_user):
-                    logger.info(
-                        "Ceph is not configured on unit. Deferring event. node_name=%s", node_name
-                    )
-                    return event.defer()
-                if "ceph" not in app_data.created_storage:
-                    logger.info(
-                        "Ceph storage pool is not created on the cluster. Deferring event. node_name=%s",
-                        node_name,
-                    )
-                    return event.defer()
+            if not self._is_ceph_ready(app_data):
+                logger.info(
+                    "Ceph storage is not ready. Deferring the event. node_name=%s", node_name
+                )
+                return event.defer()
 
-            # NOTE: if a certificate relation exists, we expect that eventually
-            # a certificate will be issued and applied to the unit. If the
-            # certificate either is not issued or not applied yet, we defer the
-            # event. This ensures that the local Incus daemon will have the
-            # certificate applied before joining the cluster.
-            if self.model.get_relation("certificates"):
-                certificate = self.tls_certificates.certificate
-                if not certificate:
-                    logger.info(
-                        "Certificate not yet emitted for this unit. Deferring event. node_name=%s",
-                        node_name,
-                    )
-                    return event.defer()
-
-                if certificate.cert != incus.get_server_certificate():
-                    logger.info(
-                        "Certificate not yet applied to unit. Deferring event. node_name=%s",
-                        node_name,
-                    )
-                    return event.defer()
+            if not self._is_certificate_ready():
+                logger.info(
+                    "Certificate is not ready. Deferring event. node_name=%s",
+                    node_name,
+                )
+                return event.defer()
 
             logger.info(
                 "Secret ID found in app data. Will fetch token from it and join the cluster. secret_id=%s",
@@ -852,6 +809,87 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         }
         incus.bootstrap_node(preseed)
         logger.info("Incus server bootstrapped")
+
+    def _enable_clustering(self):
+        """Enable clustering on the local Incus daemon.
+
+        This should be used by the leader unit to enable clustering
+        before creating join tokens for new units.
+        """
+        self.unit.status = ops.MaintenanceStatus("Enabling clustering")
+        logger.info("Node has not enabled clustering. Will enable it.")
+        incus.enable_clustering(self._node_name)
+        certificate = self.tls_certificates.certificate
+        if certificate:
+            logger.info("Updating cluster certificate.")
+            incus.update_cluster_certificate(cert=certificate.cert, key=certificate.key)
+        logger.info("Enabled clustering. node_name=%s", self._node_name)
+
+    def _create_join_token(self, node_name: str) -> str:
+        """Create a Incus cluster join token for `node_name` and returns its secret ID.
+
+        The token allows new units to join the Incus cluster. Since the token
+        contains sensitive data, it is stored as a Juju secret in the model.
+        """
+        self.unit.status = ops.MaintenanceStatus(f"Creating join token for {node_name}")
+        logger.info(
+            "Creating join token for node. node_name=%s",
+            node_name,
+        )
+        join_token = incus.create_join_token(node_name)
+        secret = self.app.add_secret({"token": join_token}, label=f"{node_name}-join-token")
+        assert secret.id, f"Generated secret does not have a valid ID. secret={secret}"
+        logger.info("Join token created.")
+        return secret.id
+
+    def _is_ceph_ready(self, app_data: ClusterAppData) -> bool:
+        """Check if all Ceph prerequisites are met to join the cluster.
+
+        If requirements are not met, the unit should defer the event that
+        it is currently handling. This avoids race conditions and ensures
+        that all members will be able to join the cluster and configure
+        the Ceph storage pool.
+        """
+        # NOTE: if a ceph relation exists, we expect that eventually a Ceph
+        # storage pool will be created on the cluster. If either ceph is not
+        # configured on the unit or the leader unit has not yet created the
+        # ceph pool and signaled it via the application data, we consider ceph
+        # as not ready.
+        if self.model.get_relation("ceph"):
+            if not ceph.is_configured(self._ceph_user):
+                logger.info("Ceph is not configured on unit. app_data=%s", app_data)
+                return False
+            if "ceph" not in app_data.created_storage:
+                logger.debug(
+                    "Ceph storage pool is not created on the cluster. app_data=%s", app_data
+                )
+                return False
+        return True
+
+    def _is_certificate_ready(self) -> bool:
+        """Check if all certificates prerequisites are met to join the cluster.
+
+        If requirements are not met, the unit should defer the event that
+        it is currently handling. This avoids race conditions and ensures
+        that all members will have the certificate applied before joining
+        the cluster.
+        """
+        # NOTE: if a certificate relation exists, we expect that eventually a
+        # certificate will be issued and applied to the unit. If the certificate
+        # either is not issued or not applied yet, we consider it not ready.
+        if self.model.get_relation("certificates"):
+            certificate = self.tls_certificates.certificate
+            if not certificate:
+                logger.debug(
+                    "Certificate not yet emitted for this unit. unit=%s",
+                    self.unit,
+                )
+                return False
+
+            if certificate.cert != incus.get_server_certificate():
+                logger.debug("Certificate not yet applied to unit. unit=%s", self.unit)
+                return False
+        return True
 
 
 if __name__ == "__main__":  # pragma: nocover
