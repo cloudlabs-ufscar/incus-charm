@@ -145,7 +145,7 @@ async def test_cluster_state(ops_test: OpsTest):
 
 
 @pytest.mark.abort_on_fail
-async def test_storage_pool(ops_test: OpsTest):
+async def test_storage_pool(ops_test: OpsTest, ceph_rbd_features: str = "layering,deep-flatten"):
     """Test the configured storage pools.
 
     All units should have a local Btrfs and a Ceph storage pool.
@@ -188,6 +188,7 @@ async def test_storage_pool(ops_test: OpsTest):
         ), "Storage pool not created on all cluster members"
         assert ceph_storage_pool["config"]["ceph.osd.pool_name"] == "incus"
         assert ceph_storage_pool["config"]["ceph.user.name"] == "incus"
+        assert ceph_storage_pool["config"]["ceph.rbd.features"] == ceph_rbd_features
 
 
 @pytest.mark.abort_on_fail
@@ -218,6 +219,31 @@ async def test_change_port(ops_test: OpsTest, port: int):
         assert content["status"] == "Success"
         assert content["status_code"] == 200
         assert content["error_code"] == 0
+
+
+@pytest.mark.abort_on_fail
+@pytest.mark.parametrize(
+    "ceph_rbd_features", ("layering,exclusive-lock,fast-diff,journaling", "layering,deep-flatten")
+)
+async def test_change_ceph_rbd_features(ops_test: OpsTest, ceph_rbd_features):
+    """Test changing the Ceph RBD features via a config option.
+
+    All Incus servers should be updated.
+    """
+    assert ops_test.model, "No model found"
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+
+    await application.set_config({"ceph-rbd-features": str(ceph_rbd_features)})
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME],
+        status="active",
+        raise_on_blocked=True,
+        timeout=OPERATION_TIMEOUT,
+    )
+
+    await test_storage_pool(ops_test, ceph_rbd_features=ceph_rbd_features)
 
 
 @pytest.mark.abort_on_fail

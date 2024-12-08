@@ -13,6 +13,8 @@ applications:
       - 2
     bindings:
       "": alpha
+    options:
+      ceph-rbd-features: layering,deep-flatten
   vault:
     charm: vault
     channel: 1.8/stable

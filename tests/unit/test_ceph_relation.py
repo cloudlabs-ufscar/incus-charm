@@ -244,7 +244,13 @@ def test_ceph_relation_changed_not_clustered_storage_pool_created():
                 "cluster-certificate": "any-certificates",
             },
         )
-        state = scenario.State(leader=True, relations={ceph_relation, cluster_relation})
+        state = scenario.State(
+            leader=True,
+            relations={ceph_relation, cluster_relation},
+            config={
+                "ceph-rbd-features": "any-rbd-feature,another-rbd-feature",
+            },
+        )
 
         out = ctx.run(ctx.on.relation_changed(relation=ceph_relation), state)
 
@@ -262,7 +268,10 @@ def test_ceph_relation_changed_not_clustered_storage_pool_created():
             pool_name="ceph",
             storage_driver="ceph",
             source="incus",
-            pool_config={"ceph.user.name": "any-app-name"},
+            pool_config={
+                "ceph.user.name": "any-app-name",
+                "ceph.rbd.features": "any-rbd-feature,another-rbd-feature",
+            },
         )
         cluster_relation = out.get_relation(cluster_relation.id)
         assert cluster_relation.local_app_data["created-storage"] == json.dumps(["ceph"])
@@ -324,7 +333,13 @@ def test_ceph_relation_changed_leader_storage_pool_created():
                 "joined-cluster-at": "2024-12-03T12:28:53.206680+00:00",
             },
         )
-        state = scenario.State(leader=True, relations={ceph_relation, cluster_relation})
+        state = scenario.State(
+            leader=True,
+            relations={ceph_relation, cluster_relation},
+            config={
+                "ceph-rbd-features": "any-rbd-feature,another-rbd-feature",
+            },
+        )
 
         out = ctx.run(ctx.on.relation_changed(relation=ceph_relation), state)
 
@@ -355,7 +370,10 @@ def test_ceph_relation_changed_leader_storage_pool_created():
                 call(
                     pool_name="ceph",
                     storage_driver="ceph",
-                    pool_config={"ceph.user.name": "any-app-name"},
+                    pool_config={
+                        "ceph.user.name": "any-app-name",
+                        "ceph.rbd.features": "any-rbd-feature,another-rbd-feature",
+                    },
                 ),
             ]
         )

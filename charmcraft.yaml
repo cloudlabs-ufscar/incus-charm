@@ -72,6 +72,15 @@ config:
         The port in which Incus will expose the metrics server to be scraped by Prometheus.
       type: int
       default: 8443
+    ceph-rbd-features:
+      description: |
+        Comma-separated list of RBD features to enable for volumes on the Ceph
+        storage pool.
+
+        To see all available features, refer to the Ceph RBD documentation:
+        https://docs.ceph.com/en/latest/man/8/rbd/#cmdoption-rbd-image-feature
+      default: layering
+      type: string
 
 actions:
   add-trusted-certificate:

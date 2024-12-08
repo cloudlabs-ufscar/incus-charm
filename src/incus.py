@@ -172,6 +172,18 @@ def create_storage(
     run_command(*args)
 
 
+def configure_storage(pool_name: str, pool_config: Dict[str, str]):
+    """Configure a storage pool in Incus.
+
+    The `pool_config` contains the parameters to be assigned to the storage pool
+    identified by `pool_name`.
+    """
+    args = ["storage", "set", pool_name]
+    for name, value in pool_config.items():
+        args.append(f"{name}={value}")
+    run_command(*args)
+
+
 def run_command(*args: str, input: Optional[str] = None) -> str:
     """Execute the incus CLI with the given `args` on the local socket.
 

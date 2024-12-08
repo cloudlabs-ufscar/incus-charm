@@ -54,6 +54,7 @@ class IncusConfig(data_models.BaseConfigModel):
     server_port: int
     cluster_port: int
     metrics_port: int
+    ceph_rbd_features: str
 
     @validator("server_port", "cluster_port", "metrics_port")
     @classmethod
@@ -533,12 +534,16 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         logger.info(
             "Creating Ceph storage pool. ceph_pool_name=%s ceph_user=%s", ceph_pool_name, ceph_user
         )
+        pool_config = {
+            "ceph.user.name": ceph_user,
+            "ceph.rbd.features": self.config.ceph_rbd_features,
+        }
         if not incus.is_clustered():
             incus.create_storage(
                 pool_name="ceph",
                 storage_driver="ceph",
                 source=ceph_pool_name,
-                pool_config={"ceph.user.name": ceph_user},
+                pool_config=pool_config,
             )
             logger.info("Ceph storage pool created.")
             return
@@ -575,7 +580,9 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             logger.info("Ceph storage pool created on node. node_name=%s", node_name)
         logger.info("Instantiating Ceph storage pool across the cluster.")
         incus.create_storage(
-            pool_name="ceph", storage_driver="ceph", pool_config={"ceph.user.name": ceph_user}
+            pool_name="ceph",
+            storage_driver="ceph",
+            pool_config=pool_config,
         )
         logger.info("Ceph storage pool created.")
 
