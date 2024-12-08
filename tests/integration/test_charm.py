@@ -126,7 +126,7 @@ async def test_change_port(ops_test: OpsTest, port: int):
     application = ops_test.model.applications[APP_NAME]
     assert application, "Application not found in model"
 
-    await application.set_config({"server_port": str(port)})
+    await application.set_config({"server-port": str(port)})
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME],
         status="active",

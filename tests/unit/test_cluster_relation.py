@@ -241,7 +241,7 @@ def test_cluster_relation_changed_non_leader_not_clustered():
                     bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
                 )
             ],
-            config={"cluster_port": 8888},
+            config={"cluster-port": 8888},
             secrets={
                 scenario.Secret(
                     id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
@@ -423,7 +423,7 @@ def test_cluster_relation_changed_non_leader_ceph_not_configured():
                     bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
                 )
             ],
-            config={"cluster_port": 8888},
+            config={"cluster-port": 8888},
             secrets={
                 scenario.Secret(
                     id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
@@ -476,7 +476,7 @@ def test_cluster_relation_changed_non_leader_ceph_pool_not_created():
                     bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
                 )
             ],
-            config={"cluster_port": 8888},
+            config={"cluster-port": 8888},
             secrets={
                 scenario.Secret(
                     id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
@@ -530,7 +530,7 @@ def test_cluster_relation_changed_non_leader_ceph_pool_created():
                     bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
                 )
             ],
-            config={"cluster_port": 8888},
+            config={"cluster-port": 8888},
             secrets={
                 scenario.Secret(
                     id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}

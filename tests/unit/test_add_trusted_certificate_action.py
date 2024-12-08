@@ -26,7 +26,7 @@ def test_invalid_input():
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(
-            config={"server_port": 8443},
+            config={"server-port": 8443},
             networks=[
                 scenario.Network(
                     binding_name="public",
@@ -61,7 +61,7 @@ def test_incus_error(certificate: str):
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(
-            config={"server_port": 8443},
+            config={"server-port": 8443},
             networks=[
                 scenario.Network(
                     binding_name="public",
@@ -101,7 +101,7 @@ def test_success(certificate: str):
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(
-            config={"server_port": 8443},
+            config={"server-port": 8443},
             networks=[
                 scenario.Network(
                     binding_name="public",

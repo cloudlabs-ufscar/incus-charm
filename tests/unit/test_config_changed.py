@@ -27,7 +27,7 @@ def test_config_changed_not_clustered(server_port, cluster_port):
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(
-            config={"server_port": server_port, "cluster_port": cluster_port},
+            config={"server-port": server_port, "cluster-port": cluster_port},
             networks=[
                 scenario.Network(
                     binding_name="public",
@@ -63,7 +63,7 @@ def test_config_changed_not_clustered_expose_metrics_endpoints(metrics_port):
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(
-            config={"server_port": 8443, "cluster_port": 8444, "metrics-port": metrics_port},
+            config={"server-port": 8443, "cluster-port": 8444, "metrics-port": metrics_port},
             networks=[
                 scenario.Network(
                     binding_name="public",
@@ -104,7 +104,7 @@ def test_config_changed_clustered(server_port, cluster_port):
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(
-            config={"server_port": server_port, "cluster_port": cluster_port},
+            config={"server-port": server_port, "cluster-port": cluster_port},
             networks=[
                 scenario.Network(
                     binding_name="public",
@@ -132,7 +132,7 @@ def test_config_changed_clustered_expose_metrics_endpoints(metrics_port):
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(
-            config={"server_port": 8443, "cluster_port": 8444, "metrics-port": metrics_port},
+            config={"server-port": 8443, "cluster-port": 8444, "metrics-port": metrics_port},
             networks=[
                 scenario.Network(
                     binding_name="public",
@@ -172,7 +172,7 @@ def test_config_changed_invalid_port(server_port, cluster_port):
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(
-            config={"server_port": server_port, "cluster_port": cluster_port},
+            config={"server-port": server_port, "cluster-port": cluster_port},
             networks=[
                 scenario.Network(
                     binding_name="public",
@@ -202,7 +202,7 @@ def test_config_changed_invalid_port_expose_metrics_endpoints(metrics_port):
     ):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(
-            config={"server_port": 8443, "cluster_port": 8444, "metrics-port": metrics_port},
+            config={"server-port": 8443, "cluster-port": 8444, "metrics-port": metrics_port},
             networks=[
                 scenario.Network(
                     binding_name="public",
