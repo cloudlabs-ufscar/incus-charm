@@ -67,6 +67,11 @@ config:
         units, but may be applied to new units.
       default: 8444
       type: int
+    metrics-port:
+      description: |
+        The port in which Incus will expose the metrics server to be scraped by Prometheus.
+      type: int
+      default: 8443
 
 actions:
   add-trusted-certificate:
@@ -100,6 +105,7 @@ actions:
 
 extra-bindings:
   public:
+  monitoring:
 
 peers:
   cluster:

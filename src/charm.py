@@ -40,8 +40,9 @@ class IncusConfig(data_models.BaseConfigModel):
 
     server_port: int
     cluster_port: int
+    metrics_port: int
 
-    @validator("server_port", "cluster_port")
+    @validator("server_port", "cluster_port", "metrics_port")
     @classmethod
     def validate_port(cls, port: int) -> int:
         """Validate that the given `port` is within a valid range."""
@@ -185,12 +186,20 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         if public_binding and public_binding.network.bind_address:
             public_address = str(public_binding.network.bind_address)
         incus.set_config("core.https_address", f"{public_address}:{server_port}")
-        self.unit.set_ports(ops.Port("tcp", server_port))
 
         # NOTE: Incus does not support changing the cluster.https_address if the
         # server is already part of a cluster.
         if not incus.is_clustered():
             incus.set_config("cluster.https_address", self._cluster_address)
+
+        metrics_address = ""
+        metrics_port = self.config.metrics_port
+        monitoring_binding = self.model.get_binding("monitoring")
+        if monitoring_binding and monitoring_binding.network.bind_address:
+            metrics_address = str(monitoring_binding.network.bind_address)
+        if metrics_address != public_address:
+            incus.set_config("core.metrics_address", f"{metrics_address}:{metrics_port}")
+        self.unit.set_ports(ops.Port("tcp", metrics_port), ops.Port("tcp", server_port))
 
     def on_start(self, event: ops.StartEvent):
         """Handle start event.
