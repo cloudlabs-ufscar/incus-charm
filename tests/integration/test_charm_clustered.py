@@ -606,3 +606,94 @@ async def test_reissue_certificates(ops_test: OpsTest, tmp_path: Path):
 
     # Assert that the certificates changed
     assert new_certificate != certificate
+
+
+@pytest.mark.abort_on_fail
+async def test_evacuate_cluster_member(ops_test: OpsTest, tmp_path: Path):
+    """Test evacuating a cluster's member.
+
+    The unit should be evacuated from the Incus cluster.
+    """
+    assert ops_test.model, "No model found"
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+
+    # Verify which unit has the instance (VM)
+    unit = application.units[0]
+    action = await unit.run("incus ls --format json")
+    await action.fetch_output()
+    assert action.status == "completed", f"Action not completed: {action.results}"
+    assert action.results["return-code"] == 0, f"Action failed: {action.results['stderr']}"
+    result = json.loads(action.results["stdout"])
+    assert len(result) == 1
+    instance_node = int(result[0]["location"][-1])
+
+    # Evacuate a unit that doesn't have the instance
+    evacuated_node = (instance_node + 1) % 3
+    action = await ops_test.model.units[f"incus/{evacuated_node}"].run_action("evacuate")
+    await action.fetch_output()
+    assert action.status == "completed", f"Action not completed: {action.results}"
+
+    # The unit should have its status updated to "Evacuated"
+    unit = application.units[0]
+    action = await unit.run_action("cluster-list", format="yaml")
+    await action.fetch_output()
+    assert action.status == "completed", f"Action not completed: {action.results}"
+    assert "result" in action.results
+    result = yaml.safe_load(action.results.get("result"))
+    assert len(result) == len(application.units), "Not all units are part of the Incus cluster."
+    for member in result:
+        if member["server_name"][-1] == str(evacuated_node):
+            assert member["status"] == "Evacuated"
+            assert member["message"] == "Unavailable due to maintenance"
+
+
+@pytest.mark.abort_on_fail
+async def test_restore_cluster_member(ops_test: OpsTest, tmp_path: Path):
+    """Test restoring a cluster's member.
+
+    The unit should be restored to the Incus cluster.
+    """
+    assert ops_test.model, "No model found"
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+
+    # Verify which unit has the instance (VM)
+    unit = application.units[0]
+    action = await unit.run("incus ls --format json")
+    await action.fetch_output()
+    assert action.status == "completed", f"Action not completed: {action.results}"
+    assert action.results["return-code"] == 0, f"Action failed: {action.results['stderr']}"
+    result = json.loads(action.results["stdout"])
+    assert len(result) == 1
+    instance_node = int(result[0]["location"][-1])
+
+    # Restore the unit
+    restored_node = (instance_node + 1) % 3
+    action = await ops_test.model.units[f"incus/{restored_node}"].run_action("restore")
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME],
+        status="active",
+        timeout=DEPLOY_TIMEOUT,
+    )
+    await action.fetch_output()
+    assert action.status == "completed", f"Action not completed: {action.results}"
+
+    # The unit should have its status updated to "Online"
+    unit = application.units[0]
+    action = await unit.run_action("cluster-list", format="yaml")
+    await action.fetch_output()
+    assert action.status == "completed", f"Action not completed: {action.results}"
+    assert "result" in action.results
+    result = yaml.safe_load(action.results.get("result"))
+    assert len(result) == len(application.units), "Not all units are part of the Incus cluster."
+    for member in result:
+        if member["server_name"][-1] == str(restored_node):
+            assert member["status"] == "Online"
+            assert member["message"] == "Fully operational"
+
+    # The cluster should remain completely functional
+    await test_workload_connectivity(ops_test, tmp_path=tmp_path)
+    await test_cluster_state(ops_test)

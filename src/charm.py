@@ -178,6 +178,8 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         )
         framework.observe(self.on.add_trusted_client_action, self.add_trusted_client_action)
         framework.observe(self.on.cluster_list_action, self.cluster_list_action)
+        framework.observe(self.on.restore_action, self.restore_action)
+        framework.observe(self.on.evacuate_action, self.evacuate_action)
 
     def on_collect_unit_status(self, event: ops.CollectStatusEvent):
         """Handle collect-unit-status event.
@@ -820,6 +822,54 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
 
             result = incus.cluster_list(format=params.format)
             event.set_results({"result": result})
+        except incus.IncusProcessError as e:
+            event.fail(str(e))
+
+    def evacuate_action(
+        self,
+        event: ops.ActionEvent,
+    ):
+        """Handle the evacuate action.
+
+        Evacuates member from the cluster, this action is only applied to the member which performs this action.
+        """
+        try:
+            if not incus.is_clustered():
+                return event.fail("Unit is not clustered")
+
+            member_info = incus.get_cluster_member_info(self._node_name)
+            if member_info.status != incus.ClusterMemberStatus.ONLINE:
+                return event.fail("This member isn't online, so it cannot be evacuated")
+
+            self.unit.status = ops.MaintenanceStatus("Evacuating node")
+            logger.info("Evacuating cluster member. node_name=%s", self._node_name)
+            incus.evacuate_node(self._node_name)
+            logger.info("Node evacuated successfully. node_name=%s", self._node_name)
+            event.set_results({"result": "Incus member evacuated from the cluster"})
+        except incus.IncusProcessError as e:
+            event.fail(str(e))
+
+    def restore_action(
+        self,
+        event: ops.ActionEvent,
+    ):
+        """Handle the restore action.
+
+        Restore member to the cluster that was priored evacuated, this action is only applied to the member which performs this action.
+        """
+        try:
+            if not incus.is_clustered():
+                return event.fail("Unit is not clustered")
+
+            member_info = incus.get_cluster_member_info(self._node_name)
+            if member_info.status != incus.ClusterMemberStatus.EVACUATED:
+                return event.fail("This member wasn't evacuated, so it cannot be restored")
+
+            self.unit.status = ops.MaintenanceStatus("Restoring node")
+            logger.info("Restoring cluster member. node_name=%s", self._node_name)
+            incus.restore_node(self._node_name)
+            logger.info("Node restored successfully. node_name=%s", self._node_name)
+            event.set_results({"result": "Incus member restored to the cluster"})
         except incus.IncusProcessError as e:
             event.fail(str(e))
 

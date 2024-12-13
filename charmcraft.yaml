@@ -157,6 +157,18 @@ actions:
         default: table
         type: string
     additionalProperties: false
+  evacuate:
+    description: |
+      Evacuate the unit from the Incus cluster.
+      For more information about evacuating nodes, refer to the Incus documentation:
+      https://linuxcontainers.org/incus/docs/main/howto/cluster_manage/#evacuate-and-restore-cluster-members
+    additionalProperties: false
+  restore:
+    description: |
+      Restore the unit of the Incus cluster that was previously evacuated.
+      For more information about restoring nodes, refer to the Incus documentation:
+      https://linuxcontainers.org/incus/docs/main/howto/cluster_manage/#evacuate-and-restore-cluster-members
+    additionalProperties: false
 
 extra-bindings:
   public:

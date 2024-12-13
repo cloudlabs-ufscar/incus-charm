@@ -88,6 +88,11 @@ def evacuate_node(node_name: str):
     run_command("cluster", "evacuate", node_name, "--force")
 
 
+def restore_node(node_name: str):
+    """Restore the member identified by `node_name` in the Incus cluster."""
+    run_command("cluster", "restore", node_name, "--force")
+
+
 def remove_cluster_member(node_name: str):
     """Remove the member identified by `node_name` from the Incus cluster."""
     run_command("cluster", "remove", node_name)
