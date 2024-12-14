@@ -6,7 +6,6 @@ import asyncio
 import json
 import logging
 import ssl
-import subprocess
 from pathlib import Path
 from typing import Set
 
@@ -155,22 +154,27 @@ async def test_add_trusted_certificate(ops_test: OpsTest, tmp_path: Path):
     application = ops_test.model.applications[APP_NAME]
     assert application, "Application not found in model"
 
-    # Create the certificate and key
-    key_path = str((tmp_path / "incus.key").absolute())
-    cert_path = str((tmp_path / "incus.crt").absolute())
-    process = subprocess.run(
-        f"openssl req -x509 -newkey rsa:2048 -keyout {key_path} -nodes -out {cert_path} -subj /CN=incus.local".split(),
-        capture_output=True,
+    # Request the certificate and key from vault
+    key_path = (tmp_path / "incus.key").absolute()
+    cert_path = (tmp_path / "incus.crt").absolute()
+    unit = ops_test.model.units["vault/0"]
+    assert unit, "No vault/0 unit found in model"
+    vault_action = await unit.run_action(
+        "generate-certificate", **{"common-name": "test-certificate", "sans": ""}
     )
-    assert (
-        process.returncode == 0
-    ), f"Failed to create certificate. returncode={process.returncode} stdout={process.stdout} stderr={process.stderr}"
+    await vault_action.fetch_output()
+    assert vault_action.status == "completed", f"Action not completed: {vault_action.results}"
+
+    assert "output" in vault_action.results
+    vault_result = json.loads(vault_action.results.get("output").replace("'", '"'))
+    cert_path.write_text(vault_result["certificate"])
+    key_path.write_text(vault_result["private_key"])
 
     # The certificate is not trusted
     unit = application.units[0]
     public_address = await unit.get_public_address()
     response = requests.get(
-        f"https://{public_address}:8443/1.0", verify=False, cert=(cert_path, key_path)
+        f"https://{public_address}:8443/1.0", verify=False, cert=(str(cert_path), str(key_path))
     )
     assert response.ok
     content = json.loads(response.content)
