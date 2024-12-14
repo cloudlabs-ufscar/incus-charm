@@ -243,6 +243,29 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             incus.set_config("core.metrics_address", f"{metrics_address}:{metrics_port}")
         self.unit.set_ports(ops.Port("tcp", metrics_port), ops.Port("tcp", server_port))
 
+        if not self.unit.is_leader():
+            return
+
+        cluster_relation = self.model.get_relation("cluster")
+        assert cluster_relation, "Cluster peer relation does not exist."
+        try:
+            data = cast(ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app]))
+            created_storage = data.created_storage
+        except ValidationError as error:
+            logger.debug(
+                "Could not validate application data when configuring Ceph storage pool. error=%s",
+                error,
+            )
+        else:
+            if "ceph" in created_storage and ceph.is_configured(self._ceph_user):
+                logger.debug(
+                    "Ceph storage pool is created. Will update its configuration values. ceph_rbd_features=%s",
+                    self.config.ceph_rbd_features,
+                )
+                incus.configure_storage(
+                    "ceph", {"ceph.rbd.features": self.config.ceph_rbd_features}
+                )
+
     def on_start(self, event: ops.StartEvent):
         """Handle start event.
 

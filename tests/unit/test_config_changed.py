@@ -224,3 +224,162 @@ def test_config_changed_invalid_port_expose_metrics_endpoints(metrics_port):
 
         assert ctx.unit_status_history == [scenario.UnknownStatus()]
         set_config.assert_not_called()
+
+
+@pytest.mark.parametrize("is_clustered", [True, False])
+def test_config_changed_ceph_rbd_features_non_leader(is_clustered: bool):
+    """Test the config-changed event for the ceph-rbd-features config option on non leader units.
+
+    Non leader units should not try to set this config option on the Incus
+    cluster.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.incus.set_config"),
+        patch("charm.incus.is_clustered", return_value=is_clustered),
+        patch("charm.incus.get_cluster_member_info"),
+        patch("charm.incus.configure_storage") as configure_storage,
+    ):
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            leader=False,
+            config={"ceph-rbd-features": "any-feature,another-feature"},
+        )
+
+        ctx.run(ctx.on.config_changed(), state)
+
+        configure_storage.assert_not_called()
+
+
+@pytest.mark.parametrize("is_clustered", [True, False])
+def test_config_changed_ceph_rbd_features_leader(is_clustered: bool):
+    """Test the config-changed event for the ceph-rbd-features config option on leader units.
+
+    The leader unit should set this config option on the Incus cluster.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.incus.set_config"),
+        patch("charm.incus.is_clustered", return_value=is_clustered),
+        patch("charm.incus.get_cluster_member_info"),
+        patch("charm.incus.configure_storage") as configure_storage,
+        patch("charm.ceph.is_configured", return_value=True),
+    ):
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            local_app_data={
+                "tokens": "{}",
+                "created-storage": '["ceph"]',
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            leader=True,
+            config={"ceph-rbd-features": "any-feature,another-feature"},
+            relations={cluster_relation},
+        )
+
+        ctx.run(ctx.on.config_changed(), state)
+
+        configure_storage.assert_called_once_with(
+            "ceph", {"ceph.rbd.features": "any-feature,another-feature"}
+        )
+
+
+def test_config_changed_ceph_rbd_features_ceph_storage_not_configured():
+    """Test the config-changed event for the ceph-rbd-features when the storage is not configured.
+
+    The leader unit should not try to set this config option on the Incus cluster.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.incus.set_config"),
+        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.get_cluster_member_info"),
+        patch("charm.incus.configure_storage") as configure_storage,
+        patch("charm.ceph.is_configured", return_value=False),
+    ):
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            local_app_data={
+                "tokens": "{}",
+                "created-storage": '["ceph"]',
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            leader=True,
+            config={"ceph-rbd-features": "any-feature,another-feature"},
+            relations={cluster_relation},
+        )
+
+        ctx.run(ctx.on.config_changed(), state)
+
+        configure_storage.assert_not_called()
+
+
+def test_config_changed_ceph_rbd_features_ceph_storage_not_created():
+    """Test the config-changed event for the ceph-rbd-features when the storage is not created.
+
+    The leader unit should not try to set this config option on the Incus cluster.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.incus.set_config"),
+        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.get_cluster_member_info"),
+        patch("charm.incus.configure_storage") as configure_storage,
+        patch("charm.ceph.is_configured", return_value=True),
+    ):
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            local_app_data={
+                "tokens": "{}",
+                "created-storage": "[]",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            leader=True,
+            config={"ceph-rbd-features": "any-feature,another-feature"},
+            relations={cluster_relation},
+        )
+
+        ctx.run(ctx.on.config_changed(), state)
+
+        configure_storage.assert_not_called()
+
+
+def test_config_changed_ceph_rbd_features_invalid_application_data():
+    """Test the config-changed event for the ceph-rbd-features when the application data is invalid.
+
+    The leader unit should not try to set this config option on the Incus cluster.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.incus.set_config"),
+        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.get_cluster_member_info"),
+        patch("charm.incus.configure_storage") as configure_storage,
+        patch("charm.ceph.is_configured", return_value=True),
+    ):
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            local_app_data={
+                "tokens": "{}",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            leader=True,
+            config={"ceph-rbd-features": "any-feature,another-feature"},
+            relations={cluster_relation},
+        )
+
+        ctx.run(ctx.on.config_changed(), state)
+
+        configure_storage.assert_not_called()
