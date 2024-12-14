@@ -71,6 +71,11 @@ def get_cluster_member_info(node_name: str) -> ClusterMemberInfo:
     return ClusterMemberInfo(**member_data)
 
 
+def set_cluster_member_failure_domain(node_name: str, failure_domain: str):
+    """Set the failure domain of the cluster member identified by `node_name`."""
+    run_command("cluster", "set", node_name, "--property", f"failure_domain={failure_domain}")
+
+
 def get_supported_storage_drivers() -> List[str]:
     """Get all currently supported storage drivers."""
     output = run_command("query", "/1.0")

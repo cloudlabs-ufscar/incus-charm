@@ -7,6 +7,7 @@
 import datetime
 import json
 import logging
+import os
 import socket
 from typing import Any, Dict, List, Optional, Union, cast
 
@@ -57,6 +58,7 @@ class IncusConfig(data_models.BaseConfigModel):
     ceph_rbd_features: str
     package_repository: str
     package_repository_gpg_key: str
+    set_failure_domain: bool
 
     @validator("server_port", "cluster_port", "metrics_port")
     @classmethod
@@ -243,6 +245,9 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         if metrics_address != public_address:
             incus.set_config("core.metrics_address", f"{metrics_address}:{metrics_port}")
         self.unit.set_ports(ops.Port("tcp", metrics_port), ops.Port("tcp", server_port))
+
+        if incus.is_clustered() and self.config.set_failure_domain:
+            self._set_failure_domain()
 
         if not self.unit.is_leader():
             return
@@ -697,6 +702,10 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
     def _ceph_user(self) -> str:
         return self.app.name
 
+    @property
+    def _availability_zone(self) -> Optional[str]:
+        return os.environ.get("JUJU_AVAILABILITY_ZONE")
+
     def _install_packages(self, *packages: str):
         """Install the specified `packages` on the system."""
         logging.info("Installing packages. packages=%s", packages)
@@ -840,6 +849,25 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         }
         incus.bootstrap_node(preseed)
         logger.info("Incus server bootstrapped")
+        self._set_failure_domain()
+
+    def _set_failure_domain(self):
+        """Set the current node failure domain."""
+        if not self.config.set_failure_domain:
+            return
+
+        if not self._availability_zone:
+            logger.warning(
+                "No availability zone available from Juju. Node will use the default failure domain."
+            )
+            return
+
+        if self._availability_zone:
+            incus.set_cluster_member_failure_domain(self._node_name, self._availability_zone)
+            logger.info(
+                "Set node failure domain according to Juju availability zone. failure_domain=%s",
+                self._availability_zone,
+            )
 
     def _enable_clustering(self):
         """Enable clustering on the local Incus daemon.
@@ -855,6 +883,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             logger.info("Updating cluster certificate.")
             incus.update_cluster_certificate(cert=certificate.cert, key=certificate.key)
         logger.info("Enabled clustering. node_name=%s", self._node_name)
+        self._set_failure_domain()
 
     def _create_join_token(self, node_name: str) -> str:
         """Create a Incus cluster join token for `node_name` and returns its secret ID.

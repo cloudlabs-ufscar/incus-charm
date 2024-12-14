@@ -114,6 +114,108 @@ def test_cluster_relation_changed_leader_not_clustered():
         assert "joined-cluster-at" in relation.local_unit_data
 
 
+def test_cluster_relation_changed_leader_not_clustered_set_failure_domain():
+    """Test the cluster-relation-changed event on leader units that are not clustered and have an availability zone set.
+
+    The unit should enable clustering in the Incus instance, set its failure domain
+    to the one specified by the JUJU_AVAILABILITY_ZONE environment variable, generate
+    a new token for the remote unit that triggered the event, store it in a secret
+    and write the ID of that secret in the relation data.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._node_name", "any-node-name"),
+        patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.incus.enable_clustering") as enable_clustering,
+        patch("charm.incus.create_join_token", return_value="any-join-token") as create_join_token,
+        patch(
+            "charm.incus.set_cluster_member_failure_domain"
+        ) as set_cluster_member_failure_domain,
+        patch.dict("charm.os.environ", {"JUJU_AVAILABILITY_ZONE": "any-availability-zone"}),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            peers_data={1: {"node-name": "peer-node-name"}},
+            local_app_data={
+                "tokens": "{}",
+                "created-storage": "[]",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        state = scenario.State(
+            leader=True, relations={relation}, config={"set-failure-domain": True}
+        )
+
+        out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+
+        enable_clustering.assert_called_once()
+        set_cluster_member_failure_domain.assert_called_once_with(
+            "any-node-name", "any-availability-zone"
+        )
+        create_join_token.assert_called_once_with("peer-node-name")
+        relation = out.get_relation(relation.id)
+        secret = out.get_secret(label="peer-node-name-join-token")
+        assert relation.local_app_data["tokens"] == json.dumps({"peer-node-name": secret.id})
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+            scenario.MaintenanceStatus("Enabling clustering"),
+            scenario.MaintenanceStatus("Creating join token for peer-node-name"),
+        ]
+        assert "joined-cluster-at" in relation.local_unit_data
+
+
+def test_cluster_relation_changed_leader_not_clustered_set_failure_domain_disabled():
+    """Test the cluster-relation-changed event on leader units that are not clustered and have a config to not set the failure domain.
+
+    The unit should enable clustering in the Incus instance, generate a new
+    token for the remote unit that triggered the event, store it in a secret
+    and write the ID of that secret in the relation data. The unit should not
+    set any failure domain.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._node_name", "any-node-name"),
+        patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.incus.enable_clustering") as enable_clustering,
+        patch("charm.incus.create_join_token", return_value="any-join-token") as create_join_token,
+        patch(
+            "charm.incus.set_cluster_member_failure_domain"
+        ) as set_cluster_member_failure_domain,
+        patch.dict("charm.os.environ", {"JUJU_AVAILABILITY_ZONE": "any-availability-zone"}),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            peers_data={1: {"node-name": "peer-node-name"}},
+            local_app_data={
+                "tokens": "{}",
+                "created-storage": "[]",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        state = scenario.State(
+            leader=True, relations={relation}, config={"set-failure-domain": False}
+        )
+
+        out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+
+        enable_clustering.assert_called_once()
+        set_cluster_member_failure_domain.assert_not_called()
+        create_join_token.assert_called_once_with("peer-node-name")
+        relation = out.get_relation(relation.id)
+        secret = out.get_secret(label="peer-node-name-join-token")
+        assert relation.local_app_data["tokens"] == json.dumps({"peer-node-name": secret.id})
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+            scenario.MaintenanceStatus("Enabling clustering"),
+            scenario.MaintenanceStatus("Creating join token for peer-node-name"),
+        ]
+        assert "joined-cluster-at" in relation.local_unit_data
+
+
 def test_cluster_relation_changed_leader_clustered():
     """Test the cluster-relation-changed event on leader units that are already clustered.
 
@@ -258,6 +360,139 @@ def test_cluster_relation_changed_non_leader_not_clustered():
             "server_address": "10.0.0.2:8888",
             "cluster_certificate": "any-cluster-certificate",
         }
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+            scenario.MaintenanceStatus("Bootstrapping Incus"),
+        ]
+        assert "joined-cluster-at" in relation.local_unit_data
+
+
+def test_cluster_relation_changed_non_leader_not_clustered_failure_domain():
+    """Test the cluster-relation-changed event on non leader units that are not clustered and have an availability zone set.
+
+    The unit should use the secret ID from the relation to retrieve the join token
+    from the secret. The token should then be used to bootstrap Incus and join the
+    cluster. The unit should also set its failure domain to the one specified by
+    the JUJU_AVAILABILITY_ZONE environment variable
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._node_name", "any-node-name"),
+        patch("charm.incus.bootstrap_node") as bootstrap_node,
+        patch("charm.incus.is_clustered", return_value=False),
+        patch(
+            "charm.incus.set_cluster_member_failure_domain"
+        ) as set_cluster_member_failure_domain,
+        patch.dict("charm.os.environ", {"JUJU_AVAILABILITY_ZONE": "any-availability-zone"}),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            peers_data={
+                0: {"node-name": "leader-node-name"},
+                1: {"node-name": "any-node-name"},
+            },
+            local_app_data={
+                "tokens": '{"any-node-name": "any-join-token-secret-id"}',
+                "created-storage": "[]",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        state = scenario.State(
+            leader=False,
+            relations={relation},
+            networks=[
+                scenario.Network(
+                    binding_name="cluster",
+                    bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
+                )
+            ],
+            config={"cluster-port": 8888, "set-failure-domain": True},
+            secrets={
+                scenario.Secret(
+                    id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
+                )
+            },
+        )
+
+        ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+
+        bootstrap_node.assert_called_once()
+        assert bootstrap_node.call_args.args[0]["cluster"] == {
+            "enabled": True,
+            "cluster_token": "any-join-token",
+            "server_address": "10.0.0.2:8888",
+            "cluster_certificate": "any-cluster-certificate",
+        }
+        set_cluster_member_failure_domain.assert_called_once_with(
+            "any-node-name", "any-availability-zone"
+        )
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+            scenario.MaintenanceStatus("Bootstrapping Incus"),
+        ]
+        assert "joined-cluster-at" in relation.local_unit_data
+
+
+def test_cluster_relation_changed_non_leader_not_clustered_failure_domain_disabled():
+    """Test the cluster-relation-changed event on non leader units that are not clustered and have a config to not set the failure domain.
+
+    The unit should use the secret ID from the relation to retrieve the join token
+    from the secret. The token should then be used to bootstrap Incus and join the
+    cluster. The unit should not set its failure domain.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._node_name", "any-node-name"),
+        patch("charm.incus.bootstrap_node") as bootstrap_node,
+        patch("charm.incus.is_clustered", return_value=False),
+        patch(
+            "charm.incus.set_cluster_member_failure_domain"
+        ) as set_cluster_member_failure_domain,
+        patch.dict("charm.os.environ", {"JUJU_AVAILABILITY_ZONE": "any-availability-zone"}),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            peers_data={
+                0: {"node-name": "leader-node-name"},
+                1: {"node-name": "any-node-name"},
+            },
+            local_app_data={
+                "tokens": '{"any-node-name": "any-join-token-secret-id"}',
+                "created-storage": "[]",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        state = scenario.State(
+            leader=False,
+            relations={relation},
+            networks=[
+                scenario.Network(
+                    binding_name="cluster",
+                    bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
+                )
+            ],
+            config={"cluster-port": 8888, "set-failure-domain": False},
+            secrets={
+                scenario.Secret(
+                    id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
+                )
+            },
+        )
+
+        ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+
+        bootstrap_node.assert_called_once()
+        assert bootstrap_node.call_args.args[0]["cluster"] == {
+            "enabled": True,
+            "cluster_token": "any-join-token",
+            "server_address": "10.0.0.2:8888",
+            "cluster_certificate": "any-cluster-certificate",
+        }
+        set_cluster_member_failure_domain.assert_not_called()
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
             scenario.MaintenanceStatus("Bootstrapping Incus"),

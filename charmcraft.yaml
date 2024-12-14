@@ -95,6 +95,15 @@ config:
         package signatures in the repository specified in `package-repository`.
       default: https://pkgs.zabbly.com/key.asc
       type: string
+    set-failure-domain:
+      description: |
+        When enabled, the charm will use Juju's availability zones to set the failure
+        domain of each node in the cluster.
+
+        For more information about failure domains, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/explanation/clustering/#failure-domains
+      default: true
+      type: boolean
 
 actions:
   add-trusted-certificate:

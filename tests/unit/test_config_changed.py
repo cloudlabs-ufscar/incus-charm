@@ -383,3 +383,109 @@ def test_config_changed_ceph_rbd_features_invalid_application_data():
         ctx.run(ctx.on.config_changed(), state)
 
         configure_storage.assert_not_called()
+
+
+@pytest.mark.parametrize("leader", [True, False])
+def test_config_changed_set_failure_domain_not_clustered(leader: bool):
+    """Test the config-changed event for the set-failure-domain config option on non clustered units.
+
+    If the unit is not part of a cluster, it should not set any failure domain.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.incus.set_config"),
+        patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.incus.get_cluster_member_info"),
+        patch("charm.IncusCharm._node_name", "any-node-name"),
+        patch(
+            "charm.incus.set_cluster_member_failure_domain"
+        ) as set_cluster_member_failure_domain,
+    ):
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            local_app_data={
+                "tokens": "{}",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            leader=leader,
+            config={"set-failure-domain": True},
+            relations={cluster_relation},
+        )
+
+        ctx.run(ctx.on.config_changed(), state)
+
+        set_cluster_member_failure_domain.assert_not_called()
+
+
+@pytest.mark.parametrize("leader", [True, False])
+def test_config_changed_set_failure_domain_clustered(leader: bool):
+    """Test the config-changed event for the set-failure-domain config option on clustered units.
+
+    If the unit is part of a cluster, it should set its failure domain using
+    the JUJU_AVAILABILITY_ZONE environment variable.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.incus.set_config"),
+        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.get_cluster_member_info"),
+        patch("charm.IncusCharm._node_name", "any-node-name"),
+        patch(
+            "charm.incus.set_cluster_member_failure_domain"
+        ) as set_cluster_member_failure_domain,
+        patch.dict("charm.os.environ", {"JUJU_AVAILABILITY_ZONE": "any-availability-zone"}),
+    ):
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            local_app_data={
+                "tokens": "{}",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            leader=leader, config={"set-failure-domain": True}, relations={cluster_relation}
+        )
+
+        ctx.run(ctx.on.config_changed(), state)
+
+        set_cluster_member_failure_domain.assert_called_once_with(
+            "any-node-name", "any-availability-zone"
+        )
+
+
+@pytest.mark.parametrize("leader", [True, False])
+def test_config_changed_set_failure_domain_clustered_az_not_available(leader: bool):
+    """Test the config-changed event for the set-failure-domain config option on clustered units that do not have the Juju availability zone.
+
+    If the unit is part of a cluster, but it does not have the JUJU_AVAILABILITY_ZONE
+    environment variable set, it should not set any failure domain.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.incus.set_config"),
+        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.get_cluster_member_info"),
+        patch("charm.IncusCharm._node_name", "any-node-name"),
+        patch(
+            "charm.incus.set_cluster_member_failure_domain"
+        ) as set_cluster_member_failure_domain,
+    ):
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            local_app_data={
+                "tokens": "{}",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            leader=leader, config={"set-failure-domain": True}, relations={cluster_relation}
+        )
+
+        ctx.run(ctx.on.config_changed(), state)
+
+        set_cluster_member_failure_domain.assert_not_called()
