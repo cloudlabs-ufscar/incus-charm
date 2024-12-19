@@ -152,6 +152,11 @@ requires:
     interface: ceph-client
     limit: 1
     optional: true
+  ovsdb-cms:
+    interface: ovsdb-cms
+    limit: 1
+    optional: true
+
 
 parts:
   charm:

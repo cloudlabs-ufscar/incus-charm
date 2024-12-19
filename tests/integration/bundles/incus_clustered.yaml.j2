@@ -20,7 +20,7 @@ applications:
     channel: 1.8/stable
     num_units: 1
     to:
-      - lxd:0
+      - 0
     bindings:
       "": alpha
     options:
@@ -48,6 +48,21 @@ applications:
       - 2
     bindings:
       "": alpha
+  ovn-central:
+    charm: ovn-central
+    channel: latest/edge
+    num_units: 3
+    to:
+      - 0
+      - 1
+      - 2
+    bindings:
+      "": alpha
+  ovn-chassis:
+    charm: ovn-chassis
+    channel: latest/edge
+    bindings:
+      "": alpha
 
 machines:
   0:
@@ -64,3 +79,13 @@ relations:
     - ceph-mon:osd
   - - incus:ceph
     - ceph-mon:client
+  - - ovn-central:certificates
+    - vault:certificates
+  - - ovn-chassis:juju-info
+    - incus:juju-info
+  - - ovn-chassis:ovsdb
+    - ovn-central:ovsdb
+  - - ovn-chassis:certificates
+    - vault:certificates
+  - - ovn-central:ovsdb-cms
+    - incus:ovsdb-cms

@@ -121,6 +121,7 @@ def test_certificates_relation_changed_single_remote_unit():
         patch("charm.IncusCharm._restart_service"),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.update_server_certificate"),
+        patch("charm.incus.set_ovn_certificate"),
     ):
         ctx = scenario.Context(IncusCharm)
         certificates_relation = scenario.Relation(
@@ -206,6 +207,7 @@ def test_certificates_relation_changed_multiple_remote_units():
         patch("charm.IncusCharm._restart_service"),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.update_server_certificate"),
+        patch("charm.incus.set_ovn_certificate"),
     ):
         ctx = scenario.Context(IncusCharm)
         certificates_relation = scenario.Relation(
@@ -259,6 +261,7 @@ def test_certificate_changed_not_clustered():
         patch("charm.IncusCharm._restart_service") as restart_service,
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.update_server_certificate") as update_server_certificate,
+        patch("charm.incus.set_ovn_certificate"),
     ):
         ctx = scenario.Context(IncusCharm)
         certificates_relation = scenario.Relation(
@@ -301,6 +304,7 @@ def test_certificate_changed_clustered_not_leader():
         patch("charm.incus.update_server_certificate") as update_server_certificate,
         patch("charm.incus.update_cluster_certificate") as update_cluster_certificate,
         patch("charm.incus.get_cluster_member_info"),
+        patch("charm.incus.set_ovn_certificate"),
     ):
         ctx = scenario.Context(IncusCharm)
         relation = scenario.Relation(
@@ -343,6 +347,7 @@ def test_certificate_changed_clustered_leader():
         patch("charm.incus.update_server_certificate") as update_server_certificate,
         patch("charm.incus.update_cluster_certificate") as update_cluster_certificate,
         patch("charm.incus.get_cluster_member_info"),
+        patch("charm.incus.set_ovn_certificate"),
     ):
         ctx = scenario.Context(IncusCharm)
         certificates_relation = scenario.Relation(
@@ -426,6 +431,7 @@ def test_certificates_relation_changed_certificate_old_stored():
         patch("charm.IncusCharm._restart_service"),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.update_server_certificate"),
+        patch("charm.incus.set_ovn_certificate"),
     ):
         ctx = scenario.Context(IncusCharm)
         certificates_relation = scenario.Relation(

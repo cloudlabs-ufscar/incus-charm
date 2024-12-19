@@ -189,6 +189,25 @@ def configure_storage(pool_name: str, pool_config: Dict[str, str]):
     run_command(*args)
 
 
+def set_ovn_certificate(cert: str, key: str, ca: str):
+    """Import ovn certificates to incus truststore."""
+    logger.debug("Setting ovn certificates to incus truststore")
+    run_command(
+        "config",
+        "set",
+        f"network.ovn.ca_cert={ca}",
+        f"network.ovn.client_cert={cert}",
+        f"network.ovn.client_key={key}",
+    )
+
+
+def set_ovn_northbound(bound_addresses: List[str]):
+    """Configure a list of Ovn Central IPs as northboundDBs on incus."""
+    logger.debug("Setting up %s as northbound connection", bound_addresses)
+    hosts = [f"ssl:{ip}:6641" for ip in bound_addresses]
+    run_command("config", "set", "network.ovn.northbound_connection", ",".join(hosts))
+
+
 def run_command(*args: str, input: Optional[str] = None) -> str:
     """Execute the incus CLI with the given `args` on the local socket.
 
