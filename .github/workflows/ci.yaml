@@ -14,10 +14,10 @@ on:
       - '.jujuignore'
       - 'LICENSE'
       - '**.md'
-  # NOTE: run the workflow every day at midnight to catch breaking
+  # NOTE: run the workflow every friday at midnight to catch breaking
   # changes in both the environment and external dependencies
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 0 * * 5'
 
 permissions:
   contents: read
