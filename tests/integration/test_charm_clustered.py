@@ -173,18 +173,18 @@ async def test_storage_pool(ops_test: OpsTest, ceph_rbd_features: str = "layerin
         btrfs_storage_pool = btrfs_storage_pools[0]
         assert btrfs_storage_pool["name"] == "default"
         assert btrfs_storage_pool["status"] == "Created"
-        assert len(btrfs_storage_pool["locations"]) == len(
-            application.units
-        ), "Storage pool not created on all cluster members"
+        assert len(btrfs_storage_pool["locations"]) == len(application.units), (
+            "Storage pool not created on all cluster members"
+        )
 
         ceph_storage_pools = [pool for pool in storage_pools if pool["driver"] == "ceph"]
         assert len(ceph_storage_pools) == 1
         ceph_storage_pool = ceph_storage_pools[0]
         assert ceph_storage_pool["name"] == "ceph"
         assert ceph_storage_pool["status"] == "Created"
-        assert len(ceph_storage_pool["locations"]) == len(
-            application.units
-        ), "Storage pool not created on all cluster members"
+        assert len(ceph_storage_pool["locations"]) == len(application.units), (
+            "Storage pool not created on all cluster members"
+        )
         assert ceph_storage_pool["config"]["ceph.osd.pool_name"] == "incus"
         assert ceph_storage_pool["config"]["ceph.user.name"] == "incus"
         assert ceph_storage_pool["config"]["ceph.rbd.features"] == ceph_rbd_features
