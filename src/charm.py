@@ -150,6 +150,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         )
         framework.observe(self.on.ceph_relation_created, self.on_ceph_relation_created)
         framework.observe(self.on.ceph_relation_changed, self.on_ceph_relation_changed)
+        framework.observe(self.on.ovsdb_cms_relation_created, self.on_ovsdb_cms_relation_created)
         framework.observe(self.on.ovsdb_cms_relation_changed, self.on_ovsdb_cms_relation_changed)
 
         # Actions
@@ -452,7 +453,13 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             assert cluster_relation, "Cluster peer relation does not exist."
             cluster_relation.data[self.app]["cluster-certificate"] = certificate.cert
 
-        incus.set_ovn_certificate(cert=certificate.cert, key=certificate.key, ca=certificate.ca)
+        # NOTE: set OVN client certificates only on the leader unit, as they
+        # are a global config option that gets propagated to all cluster members
+        if self.unit.is_leader() and self.model.get_relation("ovsdb-cms"):
+            logger.info("Setting OVN client certificates.")
+            incus.set_ovn_client_certificate(
+                cert=certificate.cert, key=certificate.key, ca=certificate.ca
+            )
 
         logger.info("Certificate applied")
 
@@ -624,6 +631,25 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         )
         logger.info("Ceph storage pool created.")
 
+    def on_ovsdb_cms_relation_created(self, event: ops.RelationCreatedEvent):
+        """Handle ovsdb-cms-relation-created event.
+
+        Sets the unit's IP address on the relation data for ovn-central to
+        create firewall rules allowing access to the ovn northbound database.
+        """
+        ovsdb_cms_binding = self.model.get_binding("ovsdb-cms")
+        if ovsdb_cms_binding and ovsdb_cms_binding.network.bind_address:
+            ovsdb_cms_address = str(ovsdb_cms_binding.network.bind_address)
+            logger.debug(
+                "Setting cms-client-bound-address on ovsdb-cms relation data. ovsdb_cms_address=%s",
+                ovsdb_cms_address,
+            )
+            event.relation.data[self.unit]["cms-client-bound-address"] = ovsdb_cms_address
+        else:
+            logger.warning(
+                "Could not set cms-client-bound-address on ovsdb-cms relation. No IP address available for ovsdb-cms binding."
+            )
+
     @data_models.parse_relation_data(unit_model=OvnCentralUnitData)
     def on_ovsdb_cms_relation_changed(
         self: ops.CharmBase,
@@ -636,24 +662,50 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         Fetches the OVN northbound database endpoints from the relation data and
         sets them on Incus.
         """
-        hosts = [
+        self = cast(IncusCharm, self)
+        if unit_data is None:
+            logger.debug("No unit data available. event=%s", event)
+            return
+        if isinstance(unit_data, ValidationError):
+            logger.debug("Invalid unit data. event=%s validation_error=%s", event, str(unit_data))
+            return
+
+        if not self.unit.is_leader():
+            logger.debug("Unit is not leader, skipping event. event=%s", event)
+            return
+
+        logger.debug(
+            "Handling ovsdb-cms relation changed event. event=%s unit_data=%s", event, unit_data
+        )
+        addresses = [
             str(address).strip('"')
             for address in (
                 event.relation.data[unit].get("bound-address") for unit in event.relation.units
             )
             if address is not None
         ]
+        addresses.sort()
         logger.debug(
-            "Collected Ovn Central addresses from relation data. bound-address=%s relation_data=%s",
-            hosts,
+            "Collected ovn-central addresses from relation data. addresses=%s relation_data=%s",
+            addresses,
             event.relation.data,
         )
 
-        if not hosts:
-            logger.error(f"No ovn-central IP found in {event.app.name} relation data")
+        if not addresses:
+            logger.debug(
+                "No ovn-central IP found in relation data. unit=%s relation_data=%s",
+                event.unit,
+                event.relation.data,
+            )
             return
 
-        incus.set_ovn_northbound(hosts)
+        self.unit.status = ops.MaintenanceStatus("Configuring OVN northbound connection endpoints")
+        northbound_connection = ",".join([f"ssl:{ip}:6641" for ip in addresses])
+        logger.info(
+            "Configuring OVN northbound connection endpoints. northbound_connection=%s",
+            northbound_connection,
+        )
+        incus.set_ovn_northbound_connection(northbound_connection)
 
     @data_models.validate_params(AddTrustedCertificateActionParams)
     def add_trusted_certificate_action(

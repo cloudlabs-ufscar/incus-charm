@@ -157,7 +157,6 @@ requires:
     limit: 1
     optional: true
 
-
 parts:
   charm:
     build-packages:
