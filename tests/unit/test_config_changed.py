@@ -270,6 +270,7 @@ def test_config_changed_ceph_rbd_features_leader(is_clustered: bool):
             local_app_data={
                 "tokens": "{}",
                 "created-storage": '["ceph"]',
+                "created-network": "[]",
                 "cluster-certificate": "any-cluster-certificate",
             },
         )

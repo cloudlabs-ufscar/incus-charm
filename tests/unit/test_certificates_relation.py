@@ -494,7 +494,16 @@ def test_certificate_changed_ovn_leader():
                 },
             },
         )
-        cluster_relation = scenario.PeerRelation(endpoint="cluster", interface="incus-cluster")
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            local_app_data={
+                "tokens": "{}",
+                "cluster-certificate": "any-cluster-certificate",
+                "created-storage": "[]",
+                "created-network": "[]",
+            },
+        )
         ovsdb_cms_relation = scenario.Relation(
             endpoint="ovsdb-cms",
             interface="ovsdb-cms",
@@ -524,6 +533,7 @@ def test_certificate_changed_ovn_leader():
             client_ca="any-ca",
             northbound_connection="ssl:10.10.0.1:6641",
         )
+        assert cluster_relation.local_app_data.get("created-network") == '["ovn"]'
 
 
 def test_certificate_changed_ovn_not_leader():

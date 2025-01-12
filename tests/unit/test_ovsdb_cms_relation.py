@@ -20,19 +20,31 @@ def test_ovsdb_cms_relation_created(address: str):
         patch("charm.incus.get_cluster_member_info"),
     ):
         ctx = scenario.Context(IncusCharm)
-        relation = scenario.Relation(endpoint="ovsdb-cms", interface="ovsdb-cms")
+        ovsdb_cms_relation = scenario.Relation(endpoint="ovsdb-cms", interface="ovsdb-cms")
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            local_app_data={
+                "tokens": "{}",
+                "cluster-certificate": "any-cluster-certificate",
+                "created-storage": "[]",
+                "created-network": "[]",
+            },
+        )
         network = scenario.Network(
             binding_name="ovsdb-cms",
             bind_addresses=[scenario.BindAddress([scenario.Address(address)])],
         )
-        state = scenario.State(leader=True, relations={relation}, networks={network})
+        state = scenario.State(
+            leader=True, relations={ovsdb_cms_relation, cluster_relation}, networks={network}
+        )
 
-        ctx.run(ctx.on.relation_created(relation=relation), state)
+        ctx.run(ctx.on.relation_created(relation=ovsdb_cms_relation), state)
 
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
         ]
-        assert relation.local_unit_data.get("cms-client-bound-address") == address
+        assert ovsdb_cms_relation.local_unit_data.get("cms-client-bound-address") == address
 
 
 def test_ovsdb_cms_relation_changed_non_leader():
@@ -47,10 +59,21 @@ def test_ovsdb_cms_relation_changed_non_leader():
         patch("charm.incus.set_ovn_northbound_connection") as set_ovn_northbound_connection,
     ):
         ctx = scenario.Context(IncusCharm)
-        relation = scenario.Relation(endpoint="ovsdb-cms", interface="ovsdb-cms")
-        state = scenario.State(leader=False, relations={relation})
+        ovsdb_cms_relation = scenario.Relation(endpoint="ovsdb-cms", interface="ovsdb-cms")
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            local_app_data={
+                "tokens": "{}",
+                "cluster-certificate": "any-cluster-certificate",
+                "created-storage": "[]",
+                "created-network": "[]",
+            },
+        )
 
-        ctx.run(ctx.on.relation_changed(relation=relation), state)
+        state = scenario.State(leader=False, relations={ovsdb_cms_relation, cluster_relation})
+
+        ctx.run(ctx.on.relation_changed(relation=ovsdb_cms_relation), state)
 
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
@@ -99,7 +122,19 @@ def test_ovsdb_cms_relation_changed_leader(addresses: List[str], expected_connec
                 },
             },
         )
-        state = scenario.State(leader=True, relations={ovsdb_cms_relation, certificates_relation})
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            local_app_data={
+                "tokens": "{}",
+                "cluster-certificate": "any-cluster-certificate",
+                "created-storage": "[]",
+                "created-network": "[]",
+            },
+        )
+        state = scenario.State(
+            leader=True, relations={ovsdb_cms_relation, certificates_relation, cluster_relation}
+        )
 
         ctx.run(ctx.on.relation_changed(relation=ovsdb_cms_relation), state)
 
@@ -113,6 +148,7 @@ def test_ovsdb_cms_relation_changed_leader(addresses: List[str], expected_connec
             client_ca="any-ca",
             northbound_connection=expected_connection,
         )
+        assert cluster_relation.local_app_data.get("created-network") == '["ovn"]'
 
 
 def test_ovsdb_cms_relation_changed_leader_no_addresses():
@@ -127,14 +163,24 @@ def test_ovsdb_cms_relation_changed_leader_no_addresses():
         patch("charm.incus.set_ovn_northbound_connection") as set_ovn_northbound_connection,
     ):
         ctx = scenario.Context(IncusCharm)
-        relation = scenario.Relation(
+        ovsdb_cms_relation = scenario.Relation(
             endpoint="ovsdb-cms",
             interface="ovsdb-cms",
             remote_units_data={0: {}},
         )
-        state = scenario.State(leader=True, relations={relation})
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            local_app_data={
+                "tokens": "{}",
+                "cluster-certificate": "any-cluster-certificate",
+                "created-storage": "[]",
+                "created-network": "[]",
+            },
+        )
+        state = scenario.State(leader=True, relations={ovsdb_cms_relation, cluster_relation})
 
-        ctx.run(ctx.on.relation_changed(relation=relation), state)
+        ctx.run(ctx.on.relation_changed(relation=ovsdb_cms_relation), state)
 
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),

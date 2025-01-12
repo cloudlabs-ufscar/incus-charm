@@ -241,6 +241,7 @@ def test_ceph_relation_changed_not_clustered_storage_pool_created():
             local_app_data={
                 "tokens": "{}",
                 "created-storage": "[]",
+                "created-network": "[]",
                 "cluster-certificate": "any-certificates",
             },
         )
@@ -326,6 +327,7 @@ def test_ceph_relation_changed_leader_storage_pool_created():
             local_app_data={
                 "tokens": "{}",
                 "created-storage": "[]",
+                "created-network": "[]",
                 "cluster-certificate": "any-certificates",
             },
             local_unit_data={
@@ -500,6 +502,7 @@ def test_ceph_relation_changed_leader_storage_pool_created_on_incus():
             local_app_data={
                 "tokens": "{}",
                 "created-storage": '["ceph"]',
+                "created-network": "[]",
                 "cluster-certificate": "any-certificates",
             },
             local_unit_data={

@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 CLIFormats = Literal["csv", "json", "table", "yaml", "compact"]
 IncusStorageDriver = Literal["dir", "btrfs", "zfs", "ceph"]
+IncusNetworkDriver = Literal["ovn"]
 
 INCUS_VAR_DIR = Path("/var/lib/incus")
 

@@ -32,6 +32,7 @@ class ClusterAppData(data_models.RelationDataModel):
     tokens: Dict[str, str]
     cluster_certificate: str
     created_storage: List[incus.IncusStorageDriver]
+    created_network: List[incus.IncusNetworkDriver]
 
 
 class ClusterUnitData(data_models.RelationDataModel):
@@ -172,23 +173,33 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         if self.model.get_relation("certificates") and not self.tls_certificates.certificate:
             event.add_status(ops.WaitingStatus("Waiting for certificate"))
 
-        if self.model.get_relation("ceph"):
-            if not ceph.is_configured(self._ceph_user):
-                event.add_status(ops.WaitingStatus("Waiting for Ceph configuration on unit"))
-            cluster_relation = self.model.get_relation("cluster")
-            assert cluster_relation, "Cluster peer relation does not exist."
-            created_storage: List[incus.IncusStorageDriver] = []
+        cluster_relation = self.model.get_relation("cluster")
+        if cluster_relation:
             try:
-                data = cast(ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app]))
-                created_storage = data.created_storage
+                cluster_data = cast(
+                    ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app])
+                )
             except ValidationError as error:
                 logger.debug(
-                    "Could not validate application data when checking Ceph storage pool. error=%s",
+                    "Could not validate cluster application data when collecting unit status. error=%s",
                     error,
                 )
             else:
-                if "ceph" not in created_storage:
-                    event.add_status(ops.WaitingStatus("Waiting for Ceph storage pool creation"))
+                if self.model.get_relation("ceph"):
+                    if not ceph.is_configured(self._ceph_user):
+                        event.add_status(
+                            ops.WaitingStatus("Waiting for Ceph configuration on unit")
+                        )
+                    else:
+                        if "ceph" not in cluster_data.created_storage:
+                            event.add_status(
+                                ops.WaitingStatus("Waiting for Ceph storage pool creation")
+                            )
+
+                if not self._is_ovn_ready(cluster_data):
+                    event.add_status(
+                        ops.WaitingStatus("Waiting for OVN northbound connection configuration")
+                    )
 
         is_clustered = incus.is_clustered()
         if not self.unit.is_leader() and not is_clustered:
@@ -327,6 +338,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             event.relation.data[event.app]["cluster-certificate"] = incus.get_server_certificate()
         event.relation.data[event.app]["tokens"] = json.dumps({})
         event.relation.data[event.app]["created-storage"] = json.dumps([])
+        event.relation.data[event.app]["created-network"] = json.dumps([])
 
     @data_models.parse_relation_data(app_model=ClusterAppData, unit_model=ClusterUnitData)
     def on_cluster_relation_changed(
@@ -405,6 +417,13 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             if not self._is_certificate_ready():
                 logger.info(
                     "Certificate is not ready. Deferring event. node_name=%s",
+                    node_name,
+                )
+                return event.defer()
+
+            if not self._is_ovn_ready(app_data):
+                logger.info(
+                    "OVN network is not ready. Deferring event. node_name=%s",
                     node_name,
                 )
                 return event.defer()
@@ -1012,6 +1031,26 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 return False
         return True
 
+    def _is_ovn_ready(self, app_data: ClusterAppData) -> bool:
+        """Check if all OVN prerequisites are met to join the cluster.
+
+        If requirements are not met, the unit should defer the event that
+        it is currently handling. This avoids race conditions and ensures
+        that all members will be able to join the cluster and configure
+        the OVN northbound connection.
+        """
+        # NOTE: if a ovsdb-cms relation exists, we expect that eventually the
+        # configuration for the OVN northbound connection will be performed an
+        # signaled in the cluster data.
+        if self.model.get_relation("ovsdb-cms"):
+            if "ovn" not in app_data.created_network:
+                logger.debug(
+                    "OVN northbound connection is not configured on the cluster. app_data=%s",
+                    app_data,
+                )
+                return False
+        return True
+
     def _maybe_configure_ovn(self):
         """Configure OVN control plane connection.
 
@@ -1057,6 +1096,13 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             client_ca=certificate.ca,
             northbound_connection=ovn_northbound_connection,
         )
+
+        cluster_relation = self.model.get_relation("cluster")
+        assert cluster_relation, "Cluster peer relation does not exist."
+        data = cast(ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app]))
+        created_network = data.created_network
+        created_network.append("ovn")
+        cluster_relation.data[self.app]["created-network"] = json.dumps(created_network)
 
     def _get_ovn_endpoint(self, relation_data: ops.RelationDataContent) -> Optional[str]:
         """Get an OVN endpoint from the unit's `relation_data`.
