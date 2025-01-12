@@ -59,7 +59,7 @@ def test_ovsdb_cms_relation_changed_non_leader():
 
 
 @pytest.mark.parametrize(
-    "addresses,expected",
+    "addresses,expected_connection",
     [
         (["10.0.0.1"], "ssl:10.0.0.1:6641"),
         (
@@ -68,7 +68,7 @@ def test_ovsdb_cms_relation_changed_non_leader():
         ),
     ],
 )
-def test_ovsdb_cms_relation_changed_leader(addresses: List[str], expected: str):
+def test_ovsdb_cms_relation_changed_leader(addresses: List[str], expected_connection: str):
     """Test the ovsdb-cms-relation-changed event on leader units.
 
     The unit should collect the ovn northbound database endpoints from the
@@ -81,20 +81,38 @@ def test_ovsdb_cms_relation_changed_leader(addresses: List[str], expected: str):
         patch("charm.incus.set_ovn_northbound_connection") as set_ovn_northbound_connection,
     ):
         ctx = scenario.Context(IncusCharm)
-        relation = scenario.Relation(
+        ovsdb_cms_relation = scenario.Relation(
             endpoint="ovsdb-cms",
             interface="ovsdb-cms",
-            remote_units_data={i: {"bound-address": v} for i, v in enumerate(addresses)},
+            remote_units_data={i: {"bound-address": f'"{v}"'} for i, v in enumerate(addresses)},
         )
-        state = scenario.State(leader=True, relations={relation})
+        certificates_relation = scenario.Relation(
+            endpoint="certificates",
+            interface="tls-certificates",
+            remote_units_data={
+                0: {
+                    "ca": "any-ca",
+                    "client.cert": "any-client-cert",
+                    "client.key": "any-client-key",
+                    "incus_0.server.cert": "any-server-cert",
+                    "incus_0.server.key": "any-server-key",
+                },
+            },
+        )
+        state = scenario.State(leader=True, relations={ovsdb_cms_relation, certificates_relation})
 
-        ctx.run(ctx.on.relation_changed(relation=relation), state)
+        ctx.run(ctx.on.relation_changed(relation=ovsdb_cms_relation), state)
 
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
-            scenario.MaintenanceStatus("Configuring OVN northbound connection endpoints"),
+            scenario.MaintenanceStatus("Configuring OVN northbound connection"),
         ]
-        set_ovn_northbound_connection.assert_called_once_with(expected)
+        set_ovn_northbound_connection.assert_called_once_with(
+            client_cert="any-server-cert",
+            client_key="any-server-key",
+            client_ca="any-ca",
+            northbound_connection=expected_connection,
+        )
 
 
 def test_ovsdb_cms_relation_changed_leader_no_addresses():

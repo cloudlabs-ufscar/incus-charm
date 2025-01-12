@@ -453,13 +453,10 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             assert cluster_relation, "Cluster peer relation does not exist."
             cluster_relation.data[self.app]["cluster-certificate"] = certificate.cert
 
-        # NOTE: set OVN client certificates only on the leader unit, as they
-        # are a global config option that gets propagated to all cluster members
+        # NOTE: set OVN configuration only on the leader unit, as OVN options
+        # are global for all cluster members
         if self.unit.is_leader() and self.model.get_relation("ovsdb-cms"):
-            logger.info("Setting OVN client certificates.")
-            incus.set_ovn_client_certificate(
-                cert=certificate.cert, key=certificate.key, ca=certificate.ca
-            )
+            self._maybe_configure_ovn()
 
         logger.info("Certificate applied")
 
@@ -677,35 +674,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         logger.debug(
             "Handling ovsdb-cms relation changed event. event=%s unit_data=%s", event, unit_data
         )
-        addresses = [
-            str(address).strip('"')
-            for address in (
-                event.relation.data[unit].get("bound-address") for unit in event.relation.units
-            )
-            if address is not None
-        ]
-        addresses.sort()
-        logger.debug(
-            "Collected ovn-central addresses from relation data. addresses=%s relation_data=%s",
-            addresses,
-            event.relation.data,
-        )
-
-        if not addresses:
-            logger.debug(
-                "No ovn-central IP found in relation data. unit=%s relation_data=%s",
-                event.unit,
-                event.relation.data,
-            )
-            return
-
-        self.unit.status = ops.MaintenanceStatus("Configuring OVN northbound connection endpoints")
-        northbound_connection = ",".join([f"ssl:{ip}:6641" for ip in addresses])
-        logger.info(
-            "Configuring OVN northbound connection endpoints. northbound_connection=%s",
-            northbound_connection,
-        )
-        incus.set_ovn_northbound_connection(northbound_connection)
+        self._maybe_configure_ovn()
 
     @data_models.validate_params(AddTrustedCertificateActionParams)
     def add_trusted_certificate_action(
@@ -1042,6 +1011,63 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 logger.debug("Certificate not yet applied to unit. unit=%s", self.unit)
                 return False
         return True
+
+    def _maybe_configure_ovn(self):
+        """Configure OVN control plane connection.
+
+        The configuration is only applied when all requirements for OVN are met.
+        We need to check if all requirements are met because any change in a OVN
+        related config option in Incus triggers a connection check. This means
+        that we must only configure OVN related options when we can ensure a
+        working connection.
+        """
+        logger.debug("Checking requirements for OVN configuration")
+        relation = self.model.get_relation("ovsdb-cms")
+        if not relation:
+            logger.debug("Relation ovsdb-cms not present. Skipping OVN configuration.")
+            return
+
+        # If any endpoints from ovn-central are missing, we're not ready
+        ovn_endpoints = [self._get_ovn_endpoint(relation.data[unit]) for unit in relation.units]
+        if not ovn_endpoints or not all(ovn_endpoints):
+            logger.debug(
+                "Endpoints missing from ovsdb-cms relation. Skipping OVN configuration. relation_data=%s",
+                relation.data,
+            )
+            return
+        ovn_endpoints = cast(List[str], ovn_endpoints)
+
+        # If no certificate is issues, we're not ready
+        certificate = self.tls_certificates.certificate
+        if not certificate:
+            logger.debug("No certificate available. Skipping OVN configuration.")
+            return
+
+        self.unit.status = ops.MaintenanceStatus("Configuring OVN northbound connection")
+
+        # If all requirements are met, configure OVN connection
+        ovn_northbound_connection = ",".join(sorted(ovn_endpoints))
+        logger.info(
+            "Configuring OVN northbound connection and setting client certificate. ovn_northbound_connection=%s",
+            ovn_northbound_connection,
+        )
+        incus.set_ovn_northbound_connection(
+            client_cert=certificate.cert,
+            client_key=certificate.key,
+            client_ca=certificate.ca,
+            northbound_connection=ovn_northbound_connection,
+        )
+
+    def _get_ovn_endpoint(self, relation_data: ops.RelationDataContent) -> Optional[str]:
+        """Get an OVN endpoint from the unit's `relation_data`.
+
+        Returns `None` if no endpoint is available.
+        """
+        ip = relation_data.get("bound-address")
+        if not ip:
+            return None
+        ip = ip.strip('"')
+        return f"ssl:{ip}:6641"
 
 
 if __name__ == "__main__":  # pragma: nocover

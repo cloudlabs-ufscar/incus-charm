@@ -189,20 +189,22 @@ def configure_storage(pool_name: str, pool_config: Dict[str, str]):
     run_command(*args)
 
 
-def set_ovn_client_certificate(cert: str, key: str, ca: str):
-    """Set OVN client certificates in Incus."""
+def set_ovn_northbound_connection(
+    client_cert: str, client_key: str, client_ca: str, northbound_connection: str
+):
+    """Set OVN northbound connection options in Incus.
+
+    The options include the northbound database endpoints as well as the client
+    certificates to be used when connecting to OVN.
+    """
     run_command(
         "config",
         "set",
-        f"network.ovn.ca_cert={ca}",
-        f"network.ovn.client_cert={cert}",
-        f"network.ovn.client_key={key}",
+        f"network.ovn.ca_cert={client_ca}",
+        f"network.ovn.client_cert={client_cert}",
+        f"network.ovn.client_key={client_key}",
+        f"network.ovn.northbound_connection={northbound_connection}",
     )
-
-
-def set_ovn_northbound_connection(northbound_connection: str):
-    """Set OVN northbound connection string on Incus."""
-    run_command("config", "set", "network.ovn.northbound_connection", northbound_connection)
 
 
 def run_command(*args: str, input: Optional[str] = None) -> str:
