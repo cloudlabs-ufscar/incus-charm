@@ -1,1 +1,2 @@
 default-base: ubuntu@22.04
+logging-config: "<root>=DEBUG"
