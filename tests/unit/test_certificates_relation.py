@@ -12,6 +12,7 @@ from charms.tls_certificates_interface.v0.tls_certificates import (
     CertificateChangedEvent,
 )
 
+import incus
 from charm import IncusCharm
 
 
@@ -528,10 +529,12 @@ def test_certificate_changed_ovn_leader():
             cert="any-server-cert", key="any-server-key"
         )
         set_ovn_northbound_connection.assert_called_once_with(
-            client_cert="any-server-cert",
-            client_key="any-server-key",
-            client_ca="any-ca",
-            northbound_connection="ssl:10.10.0.1:6641",
+            incus.OvnConnectionOptions(
+                client_cert="any-server-cert",
+                client_key="any-server-key",
+                client_ca="any-ca",
+                northbound_connection="ssl:10.10.0.1:6641",
+            )
         )
         assert cluster_relation.local_app_data.get("created-network") == '["ovn"]'
 

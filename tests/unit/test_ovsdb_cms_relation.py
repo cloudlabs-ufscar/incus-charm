@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 import scenario
 
+import incus
 from charm import IncusCharm
 
 
@@ -143,10 +144,12 @@ def test_ovsdb_cms_relation_changed_leader(addresses: List[str], expected_connec
             scenario.MaintenanceStatus("Configuring OVN northbound connection"),
         ]
         set_ovn_northbound_connection.assert_called_once_with(
-            client_cert="any-server-cert",
-            client_key="any-server-key",
-            client_ca="any-ca",
-            northbound_connection=expected_connection,
+            incus.OvnConnectionOptions(
+                client_cert="any-server-cert",
+                client_key="any-server-key",
+                client_ca="any-ca",
+                northbound_connection=expected_connection,
+            )
         )
         assert cluster_relation.local_app_data.get("created-network") == '["ovn"]'
 

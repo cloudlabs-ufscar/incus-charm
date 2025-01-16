@@ -395,7 +395,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             event.relation.data[event.app]["tokens"] = json.dumps(app_data.tokens)
         else:
             node_name = self._node_name
-            if incus.is_clustered():
+            if incus.is_clustered() or self._joined_cluster:
                 return
 
             logger.debug(
@@ -443,6 +443,14 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 datetime.timezone.utc
             ).isoformat()
 
+    @property
+    def _joined_cluster(self) -> bool:
+        """Whether the current unit already joined the cluster."""
+        cluster_relation = self.model.get_relation("cluster")
+        if not cluster_relation:
+            return False
+        return cluster_relation.data[self.unit].get("joined-cluster-at") is not None
+
     def on_certificate_changed(self, event: tls_certificates.CertificateChangedEvent):
         """Handle certificate-changed event.
 
@@ -475,7 +483,10 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         # NOTE: set OVN configuration only on the leader unit, as OVN options
         # are global for all cluster members
         if self.unit.is_leader() and self.model.get_relation("ovsdb-cms"):
-            self._maybe_configure_ovn()
+            connection_options = self._get_ovn_connection_options()
+            if connection_options:
+                logger.debug("OVN connection options available. Will configure OVN connection.")
+                self._configure_ovn_connection(event, connection_options)
 
         logger.info("Certificate applied")
 
@@ -687,13 +698,17 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             return
 
         if not self.unit.is_leader():
-            logger.debug("Unit is not leader, skipping event. event=%s", event)
+            logger.debug("Unit is not leader. Skipping event. event=%s", event)
             return
 
         logger.debug(
             "Handling ovsdb-cms relation changed event. event=%s unit_data=%s", event, unit_data
         )
-        self._maybe_configure_ovn()
+        connection_options = self._get_ovn_connection_options()
+        if not connection_options:
+            logger.debug("OVN connection options not available. Skipping event. event=%s", event)
+            return
+        self._configure_ovn_connection(event, connection_options)
 
     @data_models.validate_params(AddTrustedCertificateActionParams)
     def add_trusted_certificate_action(
@@ -1051,14 +1066,15 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 return False
         return True
 
-    def _maybe_configure_ovn(self):
-        """Configure OVN control plane connection.
+    def _get_ovn_connection_options(self) -> Optional[incus.OvnConnectionOptions]:
+        """Get the OVN connection options from the environment.
 
-        The configuration is only applied when all requirements for OVN are met.
-        We need to check if all requirements are met because any change in a OVN
-        related config option in Incus triggers a connection check. This means
-        that we must only configure OVN related options when we can ensure a
-        working connection.
+        Returns None if any of the option values are not available.
+
+        We need to check if all requirements are met before configuring the
+        connection because any change in a OVN related config option in Incus
+        triggers a connection check. This means that we must only configure
+        OVN related options when we can ensure a working connection.
         """
         logger.debug("Checking requirements for OVN configuration")
         relation = self.model.get_relation("ovsdb-cms")
@@ -1082,27 +1098,18 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             logger.debug("No certificate available. Skipping OVN configuration.")
             return
 
-        self.unit.status = ops.MaintenanceStatus("Configuring OVN northbound connection")
-
-        # If all requirements are met, configure OVN connection
+        # If all requirements are met, setup the OVN connection options
         ovn_northbound_connection = ",".join(sorted(ovn_endpoints))
         logger.info(
-            "Configuring OVN northbound connection and setting client certificate. ovn_northbound_connection=%s",
+            "Gathered all OVN northbound connection options. ovn_northbound_connection=%s",
             ovn_northbound_connection,
         )
-        incus.set_ovn_northbound_connection(
+        return incus.OvnConnectionOptions(
             client_cert=certificate.cert,
             client_key=certificate.key,
             client_ca=certificate.ca,
             northbound_connection=ovn_northbound_connection,
         )
-
-        cluster_relation = self.model.get_relation("cluster")
-        assert cluster_relation, "Cluster peer relation does not exist."
-        data = cast(ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app]))
-        created_network = data.created_network
-        created_network.append("ovn")
-        cluster_relation.data[self.app]["created-network"] = json.dumps(created_network)
 
     def _get_ovn_endpoint(self, relation_data: ops.RelationDataContent) -> Optional[str]:
         """Get an OVN endpoint from the unit's `relation_data`.
@@ -1114,6 +1121,29 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             return None
         ip = ip.strip('"')
         return f"ssl:{ip}:6641"
+
+    def _configure_ovn_connection(
+        self, event: ops.EventBase, connection_options: incus.OvnConnectionOptions
+    ):
+        """Configure the OVN connection in Incus.
+
+        If a retryable error occurs, `event` is deferred.
+        """
+        try:
+            self.unit.status = ops.MaintenanceStatus("Configuring OVN northbound connection")
+            logger.info("Configuring OVN northbound connection")
+            incus.set_ovn_northbound_connection(connection_options)
+        except incus.IncusProcessError as error:
+            if error.is_retryable:
+                logger.warning("Error is retryable. Will defer event. event=%s", event)
+                return event.defer()
+        else:
+            cluster_relation = self.model.get_relation("cluster")
+            assert cluster_relation, "Cluster peer relation does not exist."
+            data = cast(ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app]))
+            created_network = data.created_network
+            created_network.append("ovn")
+            cluster_relation.data[self.app]["created-network"] = json.dumps(created_network)
 
 
 if __name__ == "__main__":  # pragma: nocover

@@ -3,6 +3,7 @@
 import json
 import logging
 import subprocess
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -37,10 +38,36 @@ class ClusterMemberInfo(BaseModel, extra="ignore"):
     message: str
 
 
+@dataclass
+class OvnConnectionOptions:
+    """Configuration options to setup the OVN connection in Incus."""
+
+    client_cert: str
+    client_key: str
+    client_ca: str
+    northbound_connection: str
+
+
 class IncusProcessError(Exception):
     """Error raised when an Incus CLI command fails."""
 
-    ...
+    # HACK: this is a temporary workaround for a known issue in which Incus
+    # cannot propagate changes across some cluster members, causing the overall
+    # command to fail.
+    retryable_error_messages: List[str] = ["failed to connect to : failed to open connection:"]
+
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+    @property
+    def is_retryable(self) -> bool:
+        """Whether the error is retryable.
+
+        An error is considered retryable if its message is empirically
+        known to indicate a transient failure.
+        """
+        return any(message in self.message for message in self.retryable_error_messages)
 
 
 def set_config(key: str, value: Union[str, int]):
@@ -190,9 +217,7 @@ def configure_storage(pool_name: str, pool_config: Dict[str, str]):
     run_command(*args)
 
 
-def set_ovn_northbound_connection(
-    client_cert: str, client_key: str, client_ca: str, northbound_connection: str
-):
+def set_ovn_northbound_connection(options: OvnConnectionOptions):
     """Set OVN northbound connection options in Incus.
 
     The options include the northbound database endpoints as well as the client
@@ -201,10 +226,10 @@ def set_ovn_northbound_connection(
     run_command(
         "config",
         "set",
-        f"network.ovn.ca_cert={client_ca}",
-        f"network.ovn.client_cert={client_cert}",
-        f"network.ovn.client_key={client_key}",
-        f"network.ovn.northbound_connection={northbound_connection}",
+        f"network.ovn.ca_cert={options.client_ca}",
+        f"network.ovn.client_cert={options.client_cert}",
+        f"network.ovn.client_key={options.client_key}",
+        f"network.ovn.northbound_connection={options.northbound_connection}",
     )
 
 
