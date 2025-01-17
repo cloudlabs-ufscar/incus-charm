@@ -54,10 +54,11 @@ jobs:
         uses: actions/checkout@v4
       - name: Run static type checking
         run: uvx tox run -e static
-  build:
-    name: Build
+
+  integration:
+    name: Integration test
     runs-on: ubuntu
-    timeout-minutes: 20
+    timeout-minutes: 140
     needs: [lint, unit, static]
     steps:
       - name: Checkout
@@ -69,38 +70,12 @@ jobs:
         # packing will occur on the local system, instead of spawning a new LXC
         # container to perform this operation, which is the default behavior.
         run: sudo charmcraft pack --destructive-mode
-      - name: Upload charmcraft logs
-        if: ${{ failure() && steps.pack.outcome == 'failure' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: logs-charmcraft-build-${{ github.run_id }}
-          path: ~/.local/state/charmcraft/log/
-          if-no-files-found: error
-      - name: Upload charm package
-        uses: actions/upload-artifact@v4
-        with:
-          name: charm-incus-${{ github.run_id }}
-          path: |
-            *.charm
-          if-no-files-found: error
-
-  integration:
-    name: Integration test
-    runs-on: ubuntu
-    timeout-minutes: 120
-    needs: [build]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Move charm to directory
+        run: mkdir -p charm && mv *.charm charm
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
           provider: lxd
           bootstrap-constraints: cores=2 mem=2G virt-type=virtual-machine
-      - name: Download charm package
-        uses: actions/download-artifact@v4
-        with:
-          name: charm-incus-${{ github.run_id }}
-          path: charm
       - name: Run integration tests
         run: uvx tox run -e integration
