@@ -61,9 +61,10 @@ async def test_build_and_deploy(ops_test: OpsTest, tmp_path: Path):
     )
 
 
-async def get_certificate_chain(ops_test: OpsTest, unit: Unit, tmp_path: Path) -> str:
-    """Retrieve the certificate from the incus `unit` and validate it against Vault's root CA."""
-    ca_path = tmp_path / "ca.crt"
+async def get_root_ca_cert(ops_test: OpsTest) -> str:
+    """Retrieve the root CA certificate from Vault."""
+    assert ops_test.model, "No model found"
+
     action = await ops_test.model.units["vault/0"].run_action("get-root-ca")
     await action.fetch_output()
     assert action.status == "completed", f"Action not completed: {action.results}"
@@ -72,6 +73,13 @@ async def get_certificate_chain(ops_test: OpsTest, unit: Unit, tmp_path: Path) -
     ca_cert = "\n".join(ca_cert.replace(" CERTIFICATE-", "CERTIFICATE-").split()).replace(
         "CERTIFICATE-", " CERTIFICATE-"
     )
+    return ca_cert
+
+
+async def get_certificate_chain(ops_test: OpsTest, unit: Unit, tmp_path: Path) -> str:
+    """Retrieve the certificate from the incus `unit` and validate it against Vault's root CA."""
+    ca_path = tmp_path / "ca.crt"
+    ca_cert = await get_root_ca_cert(ops_test)
     ca_path.write_text(ca_cert)
 
     public_address = await unit.get_public_address()
@@ -144,7 +152,7 @@ async def test_cluster_state(ops_test: OpsTest):
 
 
 @pytest.mark.abort_on_fail
-async def test_storage_pool(ops_test: OpsTest, ceph_rbd_features: str = "layering,deep-flatten"):
+async def test_storage_pools(ops_test: OpsTest, ceph_rbd_features: str = "layering,deep-flatten"):
     """Test the configured storage pools.
 
     All units should have a local Btrfs and a Ceph storage pool.
@@ -188,6 +196,65 @@ async def test_storage_pool(ops_test: OpsTest, ceph_rbd_features: str = "layerin
         assert ceph_storage_pool["config"]["ceph.osd.pool_name"] == "incus"
         assert ceph_storage_pool["config"]["ceph.user.name"] == "incus"
         assert ceph_storage_pool["config"]["ceph.rbd.features"] == ceph_rbd_features
+
+
+@pytest.mark.abort_on_fail
+async def test_ovn_northbound_config(ops_test: OpsTest):
+    """Test the configuration for OVN Northbound connection.
+
+    All units should have the OVN endpoints and client certificates set.
+    """
+    assert ops_test.model, "No model found"
+
+    ovn_central_application = ops_test.model.applications["ovn-central"]
+    assert ovn_central_application, "Application ovn-central not found in model"
+    ovn_central_ips = [await unit.get_public_address() for unit in ovn_central_application.units]
+    ovn_northbound_connection = ",".join(sorted([f"ssl:{ip}:6641" for ip in ovn_central_ips]))
+
+    incus_unit = ops_test.model.units["incus/0"]
+    result_code, stdout, stderr = await ops_test.juju(
+        *f"exec --unit {incus_unit.name} -- cat /var/lib/incus/cluster.crt".split()
+    )
+    assert result_code == 0, stderr
+    assert stderr == ""
+    assert stdout
+    client_cert = "\n".join(stdout.replace(" CERTIFICATE-", "CERTIFICATE-").split()).replace(
+        "CERTIFICATE-", " CERTIFICATE-"
+    )
+
+    result_code, stdout, stderr = await ops_test.juju(
+        *f"exec --unit {incus_unit.name} -- cat /var/lib/incus/cluster.key".split()
+    )
+    assert result_code == 0, stderr
+    assert stderr == ""
+    assert stdout
+    client_key = "\n".join(stdout.replace(" RSA PRIVATE KEY-", "RSAPRIVATEKEY-").split()).replace(
+        "RSAPRIVATEKEY-", " RSA PRIVATE KEY-"
+    )
+
+    root_ca_cert = await get_root_ca_cert(ops_test)
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+    for unit in application.units:
+        # HACK: Incus's first command always outputs a help message that breaks
+        # output parsing. To bypass this, we always run a dummy command first.
+        await ops_test.juju(*f"exec --unit {unit.name} -- incus info".split())
+        result_code, stdout, stderr = await ops_test.juju(
+            *f"exec --unit {unit.name} -- incus query /1.0".split()
+        )
+
+        assert result_code == 0, stderr
+        assert stderr == ""
+        assert stdout
+
+        output = json.loads(stdout)
+        config = output["config"]
+
+        assert config.get("network.ovn.northbound_connection") == ovn_northbound_connection
+        assert config.get("network.ovn.ca_cert") == root_ca_cert
+        assert config.get("network.ovn.client_cert") == client_cert
+        assert config.get("network.ovn.client_key") == client_key
 
 
 @pytest.mark.abort_on_fail
@@ -242,7 +309,7 @@ async def test_change_ceph_rbd_features(ops_test: OpsTest, ceph_rbd_features):
         timeout=OPERATION_TIMEOUT,
     )
 
-    await test_storage_pool(ops_test, ceph_rbd_features=ceph_rbd_features)
+    await test_storage_pools(ops_test, ceph_rbd_features=ceph_rbd_features)
 
 
 @pytest.mark.abort_on_fail
@@ -336,7 +403,8 @@ async def test_add_unit(ops_test: OpsTest, tmp_path: Path):
 
     await test_workload_connectivity(ops_test, tmp_path)
     await test_cluster_state(ops_test)
-    await test_storage_pool(ops_test)
+    await test_storage_pools(ops_test)
+    await test_ovn_northbound_config(ops_test)
 
 
 @pytest.mark.abort_on_fail
@@ -410,7 +478,8 @@ async def test_remove_unit(ops_test: OpsTest, tmp_path: Path):
     # The cluster should remain completely functional
     await test_workload_connectivity(ops_test, tmp_path=tmp_path)
     await test_cluster_state(ops_test)
-    await test_storage_pool(ops_test)
+    await test_storage_pools(ops_test)
+    await test_ovn_northbound_config(ops_test)
 
 
 @pytest.mark.abort_on_fail
@@ -446,7 +515,8 @@ async def test_reissue_certificates(ops_test: OpsTest, tmp_path: Path):
     # The cluster should remain completely functional
     await test_workload_connectivity(ops_test, tmp_path=tmp_path)
     await test_cluster_state(ops_test)
-    await test_storage_pool(ops_test)
+    await test_storage_pools(ops_test)
+    await test_ovn_northbound_config(ops_test)
 
     # Get the new certificates
     new_certificates: Set[str] = set()
