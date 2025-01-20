@@ -9,7 +9,7 @@ import json
 import logging
 import os
 import socket
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Set, Union, cast
 
 import charmhelpers.contrib.storage.linux.ceph as ceph_client
 import charms.data_platform_libs.v0.data_models as data_models
@@ -31,8 +31,8 @@ class ClusterAppData(data_models.RelationDataModel):
 
     tokens: Dict[str, str]
     cluster_certificate: str
-    created_storage: List[incus.IncusStorageDriver]
-    created_network: List[incus.IncusNetworkDriver]
+    created_storage: Set[incus.IncusStorageDriver]
+    created_network: Set[incus.IncusNetworkDriver]
 
 
 class ClusterUnitData(data_models.RelationDataModel):
@@ -575,7 +575,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         if ceph_client.is_request_complete(request):
             cluster_relation = self.model.get_relation("cluster")
             assert cluster_relation, "Cluster peer relation does not exist."
-            created_storage: List[incus.IncusStorageDriver] = []
+            created_storage: Set[incus.IncusStorageDriver] = set()
             try:
                 data = cast(ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app]))
                 created_storage = data.created_storage
@@ -594,8 +594,8 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
 
             self.unit.status = ops.MaintenanceStatus("Creating Ceph storage pool on Incus")
             self._create_ceph_storage_pool(ceph_pool_name, self._ceph_user)
-            created_storage.append("ceph")
-            cluster_relation.data[self.app]["created-storage"] = json.dumps(created_storage)
+            created_storage.add("ceph")
+            cluster_relation.data[self.app]["created-storage"] = json.dumps(list(created_storage))
         else:
             self.unit.status = ops.MaintenanceStatus("Requesting Ceph pool creation")
             logger.info("Will request ceph-mon to create a Ceph OSD pool for Incus")
@@ -1142,8 +1142,8 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             assert cluster_relation, "Cluster peer relation does not exist."
             data = cast(ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app]))
             created_network = data.created_network
-            created_network.append("ovn")
-            cluster_relation.data[self.app]["created-network"] = json.dumps(created_network)
+            created_network.add("ovn")
+            cluster_relation.data[self.app]["created-network"] = json.dumps(list(created_network))
 
 
 if __name__ == "__main__":  # pragma: nocover
