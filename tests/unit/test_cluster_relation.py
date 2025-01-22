@@ -18,7 +18,7 @@ def test_cluster_relation_created_leader_no_certificate():
     storage and put its certificate on the relation data.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.get_server_certificate", return_value="any-certificate"),
@@ -42,7 +42,7 @@ def test_cluster_relation_created_leader():
     created storage.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.get_server_certificate") as get_server_certificate,
@@ -80,7 +80,7 @@ def test_cluster_relation_changed_leader_not_clustered():
     the ID of that secret in the relation data.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.enable_clustering") as enable_clustering,
@@ -124,7 +124,7 @@ def test_cluster_relation_changed_leader_not_clustered_set_failure_domain():
     and write the ID of that secret in the relation data.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.enable_clustering") as enable_clustering,
@@ -177,7 +177,7 @@ def test_cluster_relation_changed_leader_not_clustered_set_failure_domain_disabl
     set any failure domain.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.enable_clustering") as enable_clustering,
@@ -227,7 +227,7 @@ def test_cluster_relation_changed_leader_clustered():
     in a secret and write the ID of that secret in the relation data.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.enable_clustering") as enable_clustering,
@@ -268,7 +268,7 @@ def test_cluster_relation_changed_leader_existing_tokens():
     event, store it in a secret and write the ID of that secret in the relation data.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.enable_clustering") as enable_clustering,
@@ -320,7 +320,7 @@ def test_cluster_relation_changed_non_leader_not_clustered():
     cluster.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=False),
@@ -382,7 +382,7 @@ def test_cluster_relation_changed_non_leader_not_clustered_failure_domain():
     the JUJU_AVAILABILITY_ZONE environment variable
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=False),
@@ -450,7 +450,7 @@ def test_cluster_relation_changed_non_leader_not_clustered_failure_domain_disabl
     cluster. The unit should not set its failure domain.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=False),
@@ -514,7 +514,7 @@ def test_cluster_relation_changed_non_leader_clustered():
     The unit should not try the cluster twice. It should skip the event.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=True),
@@ -552,7 +552,7 @@ def test_cluster_relation_changed_non_leader_not_clustered_no_token():
     skip the event.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=False),
@@ -588,7 +588,7 @@ def test_cluster_relation_changed_non_leader_certificate_not_applied():
     The unit should not try to join the cluster. It should defer the event.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=False),
@@ -640,7 +640,7 @@ def test_cluster_relation_changed_non_leader_ceph_not_configured():
     should defer the event.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=False),
@@ -694,7 +694,7 @@ def test_cluster_relation_changed_non_leader_ceph_pool_not_created():
     should defer the event.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=False),
@@ -749,7 +749,7 @@ def test_cluster_relation_changed_non_leader_ceph_pool_created():
     cluster.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=False),
@@ -810,7 +810,7 @@ def test_cluster_relation_changed_non_leader_ovn_not_ready():
     should defer the event.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=False),
@@ -865,7 +865,7 @@ def test_cluster_relation_changed_non_leader_ovn_ready():
     cluster.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=False),

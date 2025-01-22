@@ -18,7 +18,7 @@ def test_start_leader_not_clustered():
     """
     with (
         patch("charm.IncusCharm._add_apt_repository"),
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.get_cluster_member_info"),
@@ -38,7 +38,7 @@ def test_start_leader_already_clustered():
     """
     with (
         patch("charm.IncusCharm._add_apt_repository"),
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
@@ -58,7 +58,7 @@ def test_start_non_leader():
     """
     with (
         patch("charm.IncusCharm._add_apt_repository"),
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.bootstrap_node") as bootstrap_node,
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.get_cluster_member_info"),

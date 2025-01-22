@@ -22,7 +22,7 @@ def test_ceph_relation_created_driver_not_supported(leader, is_clustered):
     The unit should install the needed packages and restart the Incus daemon.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=is_clustered),
         patch(
             "charm.incus.get_supported_storage_drivers",
@@ -61,7 +61,7 @@ def test_ceph_relation_created_driver_supported(leader, is_clustered):
     The unit should not install any packages nor restart the Incus daemon.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=is_clustered),
         patch(
             "charm.incus.get_supported_storage_drivers",
@@ -92,7 +92,7 @@ def test_ceph_relation_changed_non_leader():
     The unit should write the relation data to the appropriate config files.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
         patch("charm.ceph.write_keyring_file") as write_keyring_file,
@@ -147,7 +147,7 @@ def test_ceph_relation_changed_leader():
     request the creation of a Ceph storage pool in the relation.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
         patch("charm.ceph.write_keyring_file") as write_keyring_file,
@@ -206,7 +206,7 @@ def test_ceph_relation_changed_not_clustered_storage_pool_created():
     Should create the Ceph storage pool on the Incus server.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.get_cluster_member_info"),
         patch("charm.ceph.write_keyring_file") as write_keyring_file,
@@ -285,7 +285,7 @@ def test_ceph_relation_changed_leader_storage_pool_created():
     already joined the cluster and then instantiate the storage pool on the cluster.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
         patch("charm.ceph.write_keyring_file") as write_keyring_file,
@@ -389,7 +389,7 @@ def test_ceph_relation_changed_leader_storage_pool_created_invalid_app_data():
     The unit should defer the event.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
         patch("charm.ceph.write_keyring_file") as write_keyring_file,
@@ -460,7 +460,7 @@ def test_ceph_relation_changed_leader_storage_pool_created_on_incus():
     The unit should skip the creation of the storage pool.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
         patch("charm.ceph.write_keyring_file") as write_keyring_file,

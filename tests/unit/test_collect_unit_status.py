@@ -18,7 +18,7 @@ def test_collect_unit_status_package_not_installed():
 
     The unit should be in a blocked state.
     """
-    with patch("charm.IncusCharm._package_installed", False):
+    with patch("charm.IncusCharm._package_installed", return_value=False):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(leader=True)
 
@@ -33,7 +33,7 @@ def test_collect_unit_status_leader_not_clustered():
     The unit should be in a ready state.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=False),
     ):
         ctx = scenario.Context(IncusCharm)
@@ -51,7 +51,7 @@ def test_collect_unit_status_non_leader_not_clustered():
     a join token.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=False),
     ):
         ctx = scenario.Context(IncusCharm)
@@ -89,7 +89,7 @@ def test_collect_unit_status_cluster_info(member_info: ClusterMemberInfo, expect
     The unit should use the Incus cluster state to set its own status.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info", return_value=member_info),
     ):

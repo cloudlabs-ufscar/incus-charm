@@ -16,7 +16,7 @@ def test_ovsdb_cms_relation_created(address: str):
     relation in the relation data.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
     ):
@@ -54,7 +54,7 @@ def test_ovsdb_cms_relation_changed_non_leader():
     The unit should skip the event.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
         patch("charm.incus.set_ovn_northbound_connection") as set_ovn_northbound_connection,
@@ -99,7 +99,7 @@ def test_ovsdb_cms_relation_changed_leader(addresses: List[str], expected_connec
     relation data and set them in Incus.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
         patch("charm.incus.set_ovn_northbound_connection") as set_ovn_northbound_connection,
@@ -160,7 +160,7 @@ def test_ovsdb_cms_relation_changed_leader_no_addresses():
     The unit skip the event.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
         patch("charm.incus.set_ovn_northbound_connection") as set_ovn_northbound_connection,

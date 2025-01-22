@@ -22,7 +22,7 @@ def test_install(leader, is_clustered):
     """
     with (
         patch("charm.IncusCharm._add_apt_repository") as add_apt_repository,
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._install_packages") as install_packages,
         patch("charm.IncusCharm._package_version", "any-version"),
         patch("charm.incus.is_clustered", return_value=is_clustered),
@@ -52,7 +52,7 @@ def test_install_with_ceph_relation(leader, is_clustered):
     """
     with (
         patch("charm.IncusCharm._add_apt_repository") as add_apt_repository,
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._install_packages") as install_packages,
         patch("charm.IncusCharm._package_version", "any-version"),
         patch("charm.incus.is_clustered", return_value=is_clustered),
@@ -77,6 +77,42 @@ def test_install_with_ceph_relation(leader, is_clustered):
         install_packages.assert_called_once_with("incus", "ceph-common")
 
 
+@pytest.mark.parametrize(
+    "leader,is_clustered", [(False, False), (True, False), (False, True), (True, True)]
+)
+def test_install_with_web_ui_enabled(leader, is_clustered):
+    """Test the install event when the web UI is enabled.
+
+    The unit should add the APT repository and install both the incus and
+    incus-ui-canonical packages.
+    """
+    with (
+        patch("charm.IncusCharm._add_apt_repository") as add_apt_repository,
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages") as install_packages,
+        patch("charm.IncusCharm._package_version", "any-version"),
+        patch("charm.incus.is_clustered", return_value=is_clustered),
+        patch("charm.incus.get_cluster_member_info"),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            leader=leader,
+            config={"enable-web-ui": True},
+            relations=[
+                scenario.PeerRelation(endpoint="cluster"),
+            ],
+        )
+
+        out = ctx.run(ctx.on.install(), state)
+
+        assert out.workload_version == "any-version"
+        add_apt_repository.assert_called_once_with(
+            repository_line="deb https://pkgs.zabbly.com/incus/stable jammy main",
+            gpg_key_url="https://pkgs.zabbly.com/key.asc",
+        )
+        install_packages.assert_called_once_with("incus", "incus-ui-canonical")
+
+
 def test_install_repository_config():
     """Test the install event for the repository config.
 
@@ -84,7 +120,7 @@ def test_install_repository_config():
     """
     with (
         patch("charm.IncusCharm._add_apt_repository") as add_apt_repository,
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._install_packages") as install_packages,
         patch("charm.IncusCharm._package_version", "any-version"),
         patch("charm.incus.is_clustered", return_value=False),

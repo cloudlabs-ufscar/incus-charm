@@ -66,6 +66,7 @@ class IncusConfig(data_models.BaseConfigModel):
     package_repository: str
     package_repository_gpg_key: str
     set_failure_domain: bool
+    enable_web_ui: bool
 
     @validator("server_port", "cluster_port", "metrics_port")
     @classmethod
@@ -122,6 +123,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
     package_name = "incus"
     service_name = "incus"
     ceph_package_name = "ceph-common"
+    web_ui_package_name = "incus-ui-canonical"
 
     config_type = IncusConfig
 
@@ -166,7 +168,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         Collects the status of the current Incus deployment to present it
         on `juju status` output.
         """
-        if not self._package_installed:
+        if not self._package_installed(self.package_name):
             event.add_status(ops.BlockedStatus(f"Package '{self.package_name}' not installed"))
             return
 
@@ -234,6 +236,9 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         if self.model.get_relation("ceph"):
             packages.append(self.ceph_package_name)
 
+        if self.config.enable_web_ui:
+            packages.append(self.web_ui_package_name)
+
         self._install_packages(*packages)
         self.unit.set_workload_version(self._package_version)
 
@@ -267,6 +272,15 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
 
         if incus.is_clustered() and self.config.set_failure_domain:
             self._set_failure_domain()
+
+        if self.config.enable_web_ui and not self._package_installed(self.web_ui_package_name):
+            logger.info("Enabling web UI")
+            self.unit.status = ops.MaintenanceStatus("Enabling web UI")
+            self._install_packages(self.web_ui_package_name)
+        elif not self.config.enable_web_ui and self._package_installed(self.web_ui_package_name):
+            logger.info("Disabling web UI")
+            self.unit.status = ops.MaintenanceStatus("Disabling web UI")
+            self._uninstall_packages(self.web_ui_package_name)
 
         if not self.unit.is_leader():
             return
@@ -318,7 +332,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             incus.remove_cluster_member(self._node_name)
 
         self.unit.status = ops.MaintenanceStatus("Uninstalling packages")
-        self._uninstall_package()
+        self._uninstall_packages(self.package_name, self.web_ui_package_name)
 
     def on_cluster_relation_created(self, event: ops.RelationCreatedEvent):
         """Handle cluster-relation-created event.
@@ -776,11 +790,6 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         return socket.gethostname()
 
     @property
-    def _package_installed(self) -> bool:
-        package = apt.DebianPackage.from_system(self.package_name)
-        return package.present
-
-    @property
     def _package_version(self) -> str:
         package = apt.DebianPackage.from_system(self.package_name)
         if not package.present:
@@ -826,23 +835,43 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             )
             raise e
 
-    def _uninstall_package(self):
-        """Uninstall the `incus` package on the system."""
-        logging.info("Uninstalling package. package_name=%s", self.package_name)
+    def _uninstall_packages(self, *packages: str):
+        """Uninstall the specified `packages` on the system."""
+        logging.info("Uninstalling packages. packages=%s", packages)
+        package = ""
         try:
             apt.update()
-            package = apt.DebianPackage.from_system(self.package_name)
-            package.ensure(apt.PackageState.Absent)
-            logger.info("Uninstalled package. package_name=%s", self.package_name)
+            for package in packages:
+                package = apt.DebianPackage.from_system(package)
+                package.ensure(apt.PackageState.Absent)
+                logger.info("Uninstalled package. package_name=%s", package)
         except apt.PackageNotFoundError:
-            logger.warning("Package not found in repositories. package_name=%s", self.package_name)
+            logger.warning("Package not found in repositories. package_name=%s", package)
         except apt.PackageError as e:
             logger.error(
                 "Error when uninstalling package. package_name=%s error=%s",
-                self.package_name,
+                package,
                 e,
             )
             raise e
+
+    def _package_installed(self, package: str) -> bool:
+        """Check whether the given `package` is installed on the system."""
+        logging.info("Checking if package is installed. package=%s", package)
+        try:
+            apt.update()
+            package_from_system = apt.DebianPackage.from_system(package)
+            return package_from_system.state == apt.PackageState.Present
+        except apt.PackageNotFoundError:
+            logger.warning("Package not found in repositories. package_name=%s", package)
+        except apt.PackageError as e:
+            logger.error(
+                "Error when checkinf if package is installed. package_name=%s error=%s",
+                package,
+                e,
+            )
+            raise e
+        return False
 
     def _add_apt_repository(self, repository_line: str, gpg_key_url: Optional[str] = None):
         """Add the apt repository defined by `repository_line` and optionally retrieve its GPG key from `gpg_key_url`."""

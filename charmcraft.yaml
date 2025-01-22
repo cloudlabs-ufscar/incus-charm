@@ -104,6 +104,11 @@ config:
         https://linuxcontainers.org/incus/docs/main/explanation/clustering/#failure-domains
       default: true
       type: boolean
+    enable-web-ui:
+      description: |
+        Whether to enable the Incus Web UI.
+      default: false
+      type: boolean
 
 actions:
   add-trusted-certificate:

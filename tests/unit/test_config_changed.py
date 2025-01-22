@@ -20,7 +20,9 @@ def test_config_changed_not_clustered(server_port, cluster_port):
     Both the server and cluster ports should be applied to the Incus instance.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
         patch("charm.incus.set_config") as set_config,
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.get_cluster_member_info"),
@@ -56,7 +58,9 @@ def test_config_changed_not_clustered(server_port, cluster_port):
 )
 def test_config_changed_not_clustered_expose_metrics_endpoints(metrics_port):
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
         patch("charm.incus.set_config") as set_config,
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.get_cluster_member_info"),
@@ -97,7 +101,9 @@ def test_config_changed_clustered(server_port, cluster_port):
     applied to the Incus instance.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
         patch("charm.incus.set_config") as set_config,
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
@@ -125,7 +131,9 @@ def test_config_changed_clustered(server_port, cluster_port):
 @pytest.mark.parametrize("metrics_port", [(8445), (4321), (1166)])
 def test_config_changed_clustered_expose_metrics_endpoints(metrics_port):
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
         patch("charm.incus.set_config") as set_config,
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
@@ -165,7 +173,9 @@ def test_config_changed_invalid_port(server_port, cluster_port):
     to the Incus instance.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
         patch("charm.incus.set_config") as set_config,
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
@@ -195,7 +205,9 @@ def test_config_changed_invalid_port(server_port, cluster_port):
 @pytest.mark.parametrize("metrics_port", [(-1), (99999999)])
 def test_config_changed_invalid_port_expose_metrics_endpoints(metrics_port):
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
         patch("charm.incus.set_config") as set_config,
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
@@ -234,7 +246,9 @@ def test_config_changed_ceph_rbd_features_non_leader(is_clustered: bool):
     cluster.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
         patch("charm.incus.set_config"),
         patch("charm.incus.is_clustered", return_value=is_clustered),
         patch("charm.incus.get_cluster_member_info"),
@@ -258,7 +272,9 @@ def test_config_changed_ceph_rbd_features_leader(is_clustered: bool):
     The leader unit should set this config option on the Incus cluster.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
         patch("charm.incus.set_config"),
         patch("charm.incus.is_clustered", return_value=is_clustered),
         patch("charm.incus.get_cluster_member_info"),
@@ -294,7 +310,9 @@ def test_config_changed_ceph_rbd_features_ceph_storage_not_configured():
     The leader unit should not try to set this config option on the Incus cluster.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
         patch("charm.incus.set_config"),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
@@ -327,7 +345,9 @@ def test_config_changed_ceph_rbd_features_ceph_storage_not_created():
     The leader unit should not try to set this config option on the Incus cluster.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
         patch("charm.incus.set_config"),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
@@ -360,7 +380,9 @@ def test_config_changed_ceph_rbd_features_invalid_application_data():
     The leader unit should not try to set this config option on the Incus cluster.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
         patch("charm.incus.set_config"),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
@@ -393,7 +415,9 @@ def test_config_changed_set_failure_domain_not_clustered(leader: bool):
     If the unit is not part of a cluster, it should not set any failure domain.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
         patch("charm.incus.set_config"),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.get_cluster_member_info"),
@@ -429,7 +453,9 @@ def test_config_changed_set_failure_domain_clustered(leader: bool):
     the JUJU_AVAILABILITY_ZONE environment variable.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
         patch("charm.incus.set_config"),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
@@ -466,7 +492,9 @@ def test_config_changed_set_failure_domain_clustered_az_not_available(leader: bo
     environment variable set, it should not set any failure domain.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
         patch("charm.incus.set_config"),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.get_cluster_member_info"),
@@ -490,3 +518,72 @@ def test_config_changed_set_failure_domain_clustered_az_not_available(leader: bo
         ctx.run(ctx.on.config_changed(), state)
 
         set_cluster_member_failure_domain.assert_not_called()
+
+
+@pytest.mark.parametrize("package_installed", [True, False])
+def test_config_changed_enable_web_ui(package_installed):
+    """Test the config-changed event when the enable-web-ui config is true.
+
+    The unit should install the incus-ui-canonical package if it is not already
+    installed.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", return_value=package_installed),
+        patch("charm.IncusCharm._install_packages") as install_packages,
+        patch("charm.IncusCharm._uninstall_packages") as uninstall_packages,
+        patch("charm.incus.set_config"),
+        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.get_cluster_member_info"),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            config={"enable-web-ui": True},
+        )
+
+        ctx.run(ctx.on.config_changed(), state)
+
+        if not package_installed:
+            assert ctx.unit_status_history == [
+                scenario.UnknownStatus(),
+                scenario.MaintenanceStatus("Changing config"),
+                scenario.MaintenanceStatus("Enabling web UI"),
+            ]
+            install_packages.assert_called_once_with("incus-ui-canonical")
+            uninstall_packages.assert_not_called()
+        else:
+            uninstall_packages.assert_not_called()
+            install_packages.assert_not_called()
+
+
+@pytest.mark.parametrize("package_installed", [True, False])
+def test_config_changed_disable_web_ui(package_installed):
+    """Test the config-changed event when the enable-web-ui config is false.
+
+    The unit should uninstall the incus-ui-canonical package if it is installed.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", return_value=package_installed),
+        patch("charm.IncusCharm._install_packages") as install_packages,
+        patch("charm.IncusCharm._uninstall_packages") as uninstall_packages,
+        patch("charm.incus.set_config"),
+        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.get_cluster_member_info"),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            config={"enable-web-ui": False},
+        )
+
+        ctx.run(ctx.on.config_changed(), state)
+
+        if package_installed:
+            assert ctx.unit_status_history == [
+                scenario.UnknownStatus(),
+                scenario.MaintenanceStatus("Changing config"),
+                scenario.MaintenanceStatus("Disabling web UI"),
+            ]
+            uninstall_packages.assert_called_once_with("incus-ui-canonical")
+            install_packages.assert_not_called()
+        else:
+            uninstall_packages.assert_not_called()
+            install_packages.assert_not_called()

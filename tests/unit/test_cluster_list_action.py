@@ -21,7 +21,7 @@ def test_invalid_input(format):
     be returned to the operator.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=True),
         patch(
             "charm.incus.cluster_list",
@@ -51,7 +51,7 @@ def test_incus_error():
     The error should be returned to the operator.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=True),
         patch(
             "charm.incus.cluster_list",
@@ -79,7 +79,7 @@ def test_unit_not_in_cluster():
     be returned to the operator.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.cluster_list") as cluster_list,
         patch("charm.incus.get_cluster_member_info"),
@@ -104,7 +104,7 @@ def test_success():
     to the operator.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.cluster_list", return_value="any-cluster-list-result") as cluster_list,
         patch("charm.incus.get_cluster_member_info"),

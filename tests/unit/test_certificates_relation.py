@@ -26,7 +26,7 @@ def test_certificates_relation_created(leader, is_clustered):
     to generate a new certificate.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._node_name", "any-node-name"),
         patch("charm.incus.is_clustered", return_value=is_clustered),
         patch("charm.socket.getfqdn", return_value="any-host-fqdn"),
@@ -64,7 +64,7 @@ def test_certificates_relation_changed_single_remote_unit_empty_data():
     No certificate changed event should be emitted.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=False),
     ):
         ctx = scenario.Context(IncusCharm)
@@ -89,7 +89,7 @@ def test_certificates_relation_changed_single_remote_unit_incomplete_data():
     No certificate changed event should be emitted.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=False),
     ):
         ctx = scenario.Context(IncusCharm)
@@ -118,7 +118,7 @@ def test_certificates_relation_changed_single_remote_unit():
     A certificate changed event should be emitted to the charm.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._restart_service"),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.update_server_certificate"),
@@ -163,7 +163,7 @@ def test_certificates_relation_changed_multiple_remote_units_inconsistency():
     A certificate changed event should be emitted to the charm.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._restart_service"),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.update_server_certificate"),
@@ -203,7 +203,7 @@ def test_certificates_relation_changed_multiple_remote_units():
     A certificate changed event should be emitted to the charm.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._restart_service"),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.update_server_certificate"),
@@ -256,7 +256,7 @@ def test_certificate_changed_not_clustered():
     The certificate should be applied and the service restarted.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._restart_service") as restart_service,
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.update_server_certificate") as update_server_certificate,
@@ -296,7 +296,7 @@ def test_certificate_changed_clustered_not_leader():
     The certificate should be applied.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._restart_service") as restart_service,
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.update_server_certificate") as update_server_certificate,
@@ -338,7 +338,7 @@ def test_certificate_changed_clustered_leader():
     The certificate should be applied and the cluster certificate should be updated.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._restart_service") as restart_service,
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.update_server_certificate") as update_server_certificate,
@@ -383,7 +383,7 @@ def test_certificates_relation_changed_certificate_already_stored():
     A certificate changed event should not be emitted to the charm.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._restart_service"),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.update_server_certificate"),
@@ -423,7 +423,7 @@ def test_certificates_relation_changed_certificate_old_stored():
     A certificate changed event should be emitted to the charm.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._restart_service"),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.update_server_certificate"),
@@ -473,7 +473,7 @@ def test_certificate_changed_ovn_leader():
     The certificate should be applied and the ovn client certificate should be updated.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._restart_service") as restart_service,
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.update_server_certificate") as update_server_certificate,
@@ -545,7 +545,7 @@ def test_certificate_changed_ovn_not_leader():
     The certificate should be applied but the ovn client certificate should not be updated.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.IncusCharm._restart_service") as restart_service,
         patch("charm.incus.is_clustered", return_value=True),
         patch("charm.incus.update_server_certificate") as update_server_certificate,
