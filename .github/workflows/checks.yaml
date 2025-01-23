@@ -1,4 +1,4 @@
-name: CI
+name: Checks
 
 on:
   push:
@@ -7,12 +7,16 @@ on:
       - '.gitignore'
       - '.jujuignore'
       - 'LICENSE'
+      - 'commitlint.config.mjs'
+      - 'docs'
       - '**.md'
   pull_request:
     paths-ignore:
       - '.gitignore'
       - '.jujuignore'
       - 'LICENSE'
+      - 'commitlint.config.mjs'
+      - 'docs'
       - '**.md'
   # NOTE: run the workflow every friday at midnight to catch breaking
   # changes in both the environment and external dependencies
