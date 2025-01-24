@@ -1,4 +1,4 @@
-# Incus charm
+# Incus
 
 Incus is a modern, secure and powerful system container and virtual machine manager. This [Juju](https://juju.is/) charm provides a way to deploy and operate Incus in one or more servers, handling cluster formation and day 2 operations.
 
@@ -14,10 +14,11 @@ The charm also enables integration of Incus with network and storage providers s
 - Integration with OVN to provide cluster networking
 - Integration with Ceph to provide storage
 
-## Getting started
+## Documentation index
 
-To get started with the charm, check out the [getting started docs](/docs/getting-started.md). All documentation is also available on [Charmhub](https://charmhub.io/incus).
-
-## Contributing
-
-Contributions are highly appreciated. Make sure to read the [contributing guide](CONTRIBUTING.md) before you get started.
+- [Getting started](/docs/getting-started.md)
+- [Authentication](/docs/authentication.md)
+- [Clustering](/docs/clustering.md)
+- [Vault integration](/docs/vault-integration.md)
+- [Ceph integration](/docs/ceph-integration.md)
+- [OVN integration](/docs/ovn-integration.md)

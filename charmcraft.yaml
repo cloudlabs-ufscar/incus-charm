@@ -31,13 +31,13 @@ links:
 description: |
   The charm is an automated way to deploy and operate Incus.
 
-  The charm deploys an Incus cluster across all units. Integrations with
-  external network and storage services such as Ceph and OVN is provided,
-  as well as integrations with auth and monitoring services.
+  The charm deploys and manages Incus clusters across multiple units. Integrations
+  with external network and storage services such as Ceph and OVN are provided,
+  as well as an integration with Vault for cluster-wide certificate management.
 
   Incus can be used as a replacement for LXD or, depending on the use case,
-  even more sophisticated solutions such as OpenStack. The charm provides an
-  automated way of deploying and operating Incus.
+  even more sophisticated solutions for private clouds such as OpenStack. The
+  charm provides an automated way of deploying and operating Incus.
 
   The charm is useful for operators who wish to deploy and operate Incus.
 

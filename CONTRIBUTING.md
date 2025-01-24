@@ -72,6 +72,8 @@ tox devenv -e integration
 source venv/bin/activate
 ```
 
+See the [Juju SDK documentation](https://juju.is/docs/sdk) for more information about developing charms.
+
 ### Testing
 
 This project uses `tox` for managing test environments. There are some pre-configured environments that can be used for linting and formatting code when you're preparing contributions to the charm:
