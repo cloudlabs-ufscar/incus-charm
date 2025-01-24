@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 CLIFormats = Literal["csv", "json", "table", "yaml", "compact"]
 IncusStorageDriver = Literal["dir", "btrfs", "zfs", "ceph"]
 IncusNetworkDriver = Literal["ovn"]
+IncusClientCertificateType = Literal["client", "metrics"]
 
 INCUS_VAR_DIR = Path("/var/lib/incus")
 
@@ -138,7 +139,7 @@ def bootstrap_node(preseed: dict):
 
 def add_trusted_certificate(
     cert: str,
-    type: Literal["client", "metrics"],
+    type: IncusClientCertificateType,
     name: Optional[str] = None,
     projects: Optional[List[str]] = None,
 ):

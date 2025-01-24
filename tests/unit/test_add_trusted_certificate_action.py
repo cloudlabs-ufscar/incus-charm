@@ -13,8 +13,8 @@ from charm import IncusCharm
 from incus import IncusProcessError
 
 
-def test_invalid_input():
-    """Test the add-trusted-certificate action with invalid input.
+def test_invalid_certificate():
+    """Test the add-trusted-certificate action with an invalid certificate.
 
     No action should be performed in the Incus instance. An error should
     be returned to the operator.
@@ -43,6 +43,41 @@ def test_invalid_input():
 
         assert ctx.unit_status_history == [scenario.UnknownStatus()]
         assert "value is not a valid x509 certificate" in exc_info.value.message
+        add_trusted_certificate.assert_not_called()
+
+
+def test_invalid_type(certificate: str):
+    """Test the add-trusted-certificate action with an invalid type.
+
+    No action should be performed in the Incus instance. An error should
+    be returned to the operator.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.incus.add_trusted_certificate") as add_trusted_certificate,
+    ):
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            config={"server-port": 8443},
+            networks=[
+                scenario.Network(
+                    binding_name="public",
+                    bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.1")])],
+                )
+            ],
+        )
+
+        with pytest.raises(scenario.ActionFailed) as exc_info:
+            ctx.run(
+                ctx.on.action(
+                    "add-trusted-certificate", params={"cert": certificate, "type": "any-type"}
+                ),
+                state,
+            )
+
+        assert ctx.unit_status_history == [scenario.UnknownStatus()]
+        assert "unexpected value; permitted: 'client', 'metrics'" in exc_info.value.message
         add_trusted_certificate.assert_not_called()
 
 

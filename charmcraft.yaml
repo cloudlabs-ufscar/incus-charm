@@ -127,6 +127,11 @@ actions:
           The file can be passed as:
           $ juju run incus/leader add-trusted-certificate cert="$(cat client.crt)"
         type: string
+      type:
+        description: |
+          The type of certificate to be added. Can be either "client" (the default) or "metrics".
+        type: string
+        default: client
     required:
       - cert
     additionalProperties: false

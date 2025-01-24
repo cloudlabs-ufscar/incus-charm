@@ -89,6 +89,7 @@ class AddTrustedCertificateActionParams(data_models.BaseConfigModel):
 
     cert: str
     name: Optional[str] = None
+    type: incus.IncusClientCertificateType = "client"
     projects: Optional[List[str]] = None
 
     @validator("projects", pre=True)
@@ -746,7 +747,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         try:
             incus.add_trusted_certificate(
                 cert=params.cert,
-                type="client",
+                type=params.type,
                 projects=params.projects,
                 name=params.name,
             )
