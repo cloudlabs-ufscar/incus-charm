@@ -3,6 +3,7 @@
 # See LICENSE file for licensing details.
 
 import asyncio
+import base64
 import json
 import logging
 import ssl
@@ -427,6 +428,32 @@ async def test_add_trusted_certificate(ops_test: OpsTest, tmp_path: Path):
         assert content["status_code"] == 200
         assert content["error_code"] == 0
         assert content["metadata"]["auth"] == "trusted"
+
+
+@pytest.mark.abort_on_fail
+async def test_add_trusted_client(ops_test: OpsTest):
+    """Test adding a trusted client via the add-trusted-client action.
+
+    A valid trust token should be generated.
+    """
+    assert ops_test.model, "No model found"
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+
+    # Add the trusted client
+    unit = application.units[0]
+    action = await unit.run_action(
+        "add-trusted-client",
+        name="test-client",
+    )
+    await action.fetch_output()
+    assert action.status == "completed", f"Action not completed: {action.results}"
+
+    token = action.results.get("token")
+    assert token, f"No join token found in action results: {action.results}"
+    token_content = json.loads(base64.b64decode(token))
+    assert token_content["client_name"] == "test-client"
 
 
 @pytest.mark.abort_on_fail

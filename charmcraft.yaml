@@ -135,6 +135,19 @@ actions:
     required:
       - cert
     additionalProperties: false
+  add-trusted-client:
+    description: |
+      Generate a Incus trust token that can be used by the client to add itself to the trust store.
+    params:
+      name:
+        description: The client name
+        type: string
+      projects:
+        description: A comma separated list of projects to restrict the client certificate to (optional)
+        type: string
+    required:
+      - name
+    additionalProperties: false
   cluster-list:
     description: List all cluster members and their state. Equivalent to the `incus cluster list` command.
     params:

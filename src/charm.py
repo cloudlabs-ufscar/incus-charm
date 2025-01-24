@@ -118,6 +118,21 @@ class AddTrustedCertificateActionParams(data_models.BaseConfigModel):
         )
 
 
+class AddTrustedClientActionParams(data_models.BaseConfigModel):
+    """Parameters for the add-trusted-client action."""
+
+    name: str
+    projects: Optional[List[str]] = None
+
+    @validator("projects", pre=True)
+    @classmethod
+    def split_projects(cls, value):
+        """Split a comma separated string of projects into a list."""
+        if isinstance(value, str):
+            return [project.strip() for project in value.split(",")]
+        return value
+
+
 class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
     """Charm the Incus application."""
 
@@ -161,6 +176,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         framework.observe(
             self.on.add_trusted_certificate_action, self.add_trusted_certificate_action
         )
+        framework.observe(self.on.add_trusted_client_action, self.add_trusted_client_action)
         framework.observe(self.on.cluster_list_action, self.cluster_list_action)
 
     def on_collect_unit_status(self, event: ops.CollectStatusEvent):
@@ -752,6 +768,35 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 name=params.name,
             )
             event.set_results({"result": "Certificate added to Incus truststore"})
+        except incus.IncusProcessError as e:
+            event.fail(str(e))
+
+    @data_models.validate_params(AddTrustedClientActionParams)
+    def add_trusted_client_action(
+        self: ops.CharmBase,
+        event: ops.ActionEvent,
+        params: Union[AddTrustedClientActionParams, ValidationError],
+    ):
+        """Handle the add-trusted-client action.
+
+        Creates a new trust token in the Incus truststore.
+        """
+        if isinstance(params, ValidationError):
+            return event.fail(str(params))
+        self.unit.status = ops.MaintenanceStatus("Adding trusted client")
+        logger.debug(
+            "Adding trusted client. name=%s projects=%s",
+            params.name,
+            params.projects,
+        )
+        try:
+            token = incus.add_trusted_client(name=params.name, projects=params.projects)
+            event.set_results(
+                {
+                    "result": "Client added to Incus truststore.\nRun `incus remote add <remote-name> <token>` to add the server as a remote.",
+                    "token": token,
+                }
+            )
         except incus.IncusProcessError as e:
             event.fail(str(e))
 

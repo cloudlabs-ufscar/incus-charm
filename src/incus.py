@@ -156,6 +156,18 @@ def add_trusted_certificate(
         run_command(*args)
 
 
+def add_trusted_client(
+    name: str,
+    projects: Optional[List[str]] = None,
+) -> str:
+    """Generate a new trust token in the Incus daemon truststore with `name` and returns it."""
+    args = ["config", "trust", "add", name]
+    if projects:
+        args.extend(["--projects", ",".join(projects)])
+
+    return run_command(*args)
+
+
 def update_cluster_certificate(cert: str, key: str):
     """Update the cluster members certificate to the new `cert` and `key`."""
     with NamedTemporaryFile() as cert_file, NamedTemporaryFile() as key_file:
