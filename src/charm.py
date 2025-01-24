@@ -942,7 +942,15 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             "projects": [],
             "cluster": cluster_info,
         }
-        incus.bootstrap_node(preseed)
+        try:
+            incus.bootstrap_node(preseed)
+        except incus.IncusProcessError as error:
+            if not error.is_retryable:
+                raise error
+            logger.warning(
+                "A retryable error occurred while bootstrapping Incus. Despite that, the server should have been correctly bootstrapped. error=%s",
+                error,
+            )
         logger.info("Incus server bootstrapped")
         self._set_failure_domain()
 
