@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from src.ceph import is_configured, write_ceph_conf_file, write_keyring_file
+from ceph import is_configured, write_ceph_conf_file, write_keyring_file
 
 
 def test_write_keyring_file(tmp_path: Path):

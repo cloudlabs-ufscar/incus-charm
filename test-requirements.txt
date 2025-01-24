@@ -1,5 +1,4 @@
 pytest~=8.3
-coverage~=7.6
 pyright~=1.1
 ruff~=0.7
 codespell~=2.3
@@ -7,3 +6,5 @@ juju~=3.5
 pytest-operator~=0.38
 ops-scenario~=7.0
 websockets<14.0
+pytest-xdist~=3.6.1
+pytest-cov~=6.0.0
