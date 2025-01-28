@@ -313,6 +313,57 @@ async def test_change_ceph_rbd_features(ops_test: OpsTest, ceph_rbd_features):
 
 
 @pytest.mark.abort_on_fail
+async def test_enable_web_ui(ops_test: OpsTest):
+    """Test enabling and disabling the Incus web UI via a config option.
+
+    All Incus servers should be updated.
+    """
+    assert ops_test.model, "No model found"
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+
+    # The web UI is disabled by default
+    for unit in application.units:
+        assert unit.workload_status_message == "Online: Fully operational"
+        public_address = await unit.get_public_address()
+        response = requests.get(f"https://{public_address}:8443/ui/login", verify=False)
+        assert response.status_code == 404
+
+    # Enable the web UI
+    await application.set_config({"enable-web-ui": "true"})
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME],
+        status="active",
+        timeout=OPERATION_TIMEOUT * 5,
+    )
+
+    # The web UI is now enabled
+    for unit in application.units:
+        assert unit.workload_status_message == "Online: Fully operational"
+        public_address = await unit.get_public_address()
+        response = requests.get(f"https://{public_address}:8443/ui/login", verify=False)
+        assert response.ok
+        assert response.headers["content-type"] == "text/html; charset=utf-8"
+        assert b"Incus UI" in response.content
+
+    # Disable the web UI
+    await application.set_config({"enable-web-ui": "false"})
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME],
+        status="active",
+        timeout=OPERATION_TIMEOUT * 5,
+    )
+
+    # The web UI is now disabled
+    for unit in application.units:
+        assert unit.workload_status_message == "Online: Fully operational"
+        public_address = await unit.get_public_address()
+        response = requests.get(f"https://{public_address}:8443/ui/login", verify=False)
+        assert response.status_code == 404
+
+
+@pytest.mark.abort_on_fail
 async def test_add_trusted_certificate(ops_test: OpsTest, tmp_path: Path):
     """Test adding a trusted certificate via the add-trusted-certificate action.
 
