@@ -469,6 +469,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             assert token, "Join token secret has an invalid content."
             cluster_certificate = app_data.cluster_certificate
             self._bootstrap_incus(join_token=token, cluster_certificate=cluster_certificate)
+            self._set_failure_domain()
             logger.info("Joined cluster. node_name=%s", self._node_name)
             event.relation.data[self.unit]["joined-cluster-at"] = datetime.datetime.now(
                 datetime.timezone.utc
@@ -1027,7 +1028,6 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 error,
             )
         logger.info("Incus server bootstrapped")
-        self._set_failure_domain()
 
     def _set_failure_domain(self):
         """Set the current node failure domain."""
