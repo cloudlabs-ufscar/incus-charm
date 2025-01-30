@@ -53,7 +53,7 @@ def test_invalid_type(certificate: str):
     be returned to the operator.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=False),
         patch("charm.incus.add_trusted_certificate") as add_trusted_certificate,
     ):

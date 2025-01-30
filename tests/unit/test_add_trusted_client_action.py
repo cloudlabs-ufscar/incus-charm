@@ -19,7 +19,7 @@ def test_incus_error():
     The error should be returned to the operator.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=False),
         patch(
             "charm.incus.add_trusted_client",
@@ -61,7 +61,7 @@ def test_success():
     the trust token.
     """
     with (
-        patch("charm.IncusCharm._package_installed", True),
+        patch("charm.IncusCharm._package_installed", return_value=True),
         patch("charm.incus.is_clustered", return_value=False),
         patch(
             "charm.incus.add_trusted_client", return_value="any-trust-token"
