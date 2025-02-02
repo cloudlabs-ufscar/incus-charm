@@ -3,21 +3,23 @@ name: Checks
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - '.gitignore'
-      - '.jujuignore'
-      - 'LICENSE'
-      - 'commitlint.config.mjs'
-      - 'docs'
-      - '**.md'
+    paths:
+      - charmcraft.yaml
+      - requirements.txt
+      - test-requirements.txt
+      - tox.ini
+      - lib/**
+      - src/**
+      - tests/**
   pull_request:
-    paths-ignore:
-      - '.gitignore'
-      - '.jujuignore'
-      - 'LICENSE'
-      - 'commitlint.config.mjs'
-      - 'docs'
-      - '**.md'
+    paths:
+      - charmcraft.yaml
+      - requirements.txt
+      - test-requirements.txt
+      - tox.ini
+      - lib/**
+      - src/**
+      - tests/**
   # NOTE: run the workflow every friday at midnight to catch breaking
   # changes in both the environment and external dependencies
   schedule:
