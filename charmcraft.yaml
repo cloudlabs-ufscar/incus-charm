@@ -10,11 +10,21 @@ type: charm
 
 
 # (Recommended)
-title: Incus Charm
+title: Incus
 
 
 # (Required)
 summary: Charmed Incus.
+
+links:
+  contact: cloudlabs@ufscar.br
+  documentation: https://discourse.charmhub.io/t/incus-docs-index/16723
+  issues:
+    - https://github.com/cloudlabs-ufscar/incus-charm/issues
+  source:
+    - https://github.com/cloudlabs-ufscar/incus-charm
+  website:
+    - https://github.com/cloudlabs-ufscar/incus-charm
 
 
 # (Required)
