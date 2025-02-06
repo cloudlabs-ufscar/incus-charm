@@ -35,7 +35,7 @@ concurrency:
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu
+    runs-on: [ubuntu, incus, checks]
     timeout-minutes: 5
     steps:
       - name: Checkout
@@ -44,7 +44,7 @@ jobs:
         run: uvx tox run -e lint
   unit:
     name: Unit test
-    runs-on: ubuntu
+    runs-on: [ubuntu, incus, checks]
     timeout-minutes: 5
     steps:
       - name: Checkout
@@ -53,7 +53,7 @@ jobs:
         run: uvx tox run -e unit
   static:
     name: Static type check
-    runs-on: ubuntu
+    runs-on: [ubuntu, incus, checks]
     timeout-minutes: 5
     steps:
       - name: Checkout
@@ -63,7 +63,7 @@ jobs:
 
   integration:
     name: Integration test
-    runs-on: ubuntu
+    runs-on: [ubuntu, incus, integration-tests]
     timeout-minutes: 180
     needs: [lint, unit, static]
     steps:
