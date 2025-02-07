@@ -63,7 +63,7 @@ The full text of the DCO is provided below:
 
 ## Local development
 
-To make contributions to this charm, you'll need a working [development setup](https://juju.is/docs/sdk/dev-setup).
+To make contributions to this charm, you'll need a working [development setup](https://canonical-juju.readthedocs-hosted.com/en/latest/user/howto/manage-your-deployment/manage-your-deployment-environment).
 
 You can create a Python virtual environment with all dependencies needed for development with `tox`:
 
@@ -72,9 +72,11 @@ tox devenv -e integration
 source venv/bin/activate
 ```
 
+See the [Juju SDK documentation](https://juju.is/docs/sdk) for more information about developing charms.
+
 ### Testing
 
-This project uses `tox` for managing test environments. There are some pre-configured environments that can be used for linting and formatting code when you're preparing contributions to the charm:
+This project uses `tox` for managing test environments. There are some environments that can be used for linting and formatting code when you're preparing contributions to the charm:
 
 ```shell
 tox run -e format        # update your code according to linting rules
