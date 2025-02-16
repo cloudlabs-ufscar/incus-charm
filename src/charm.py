@@ -758,7 +758,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
 
     #    @data_models.parse_relation_data(unit_model=)
     def _on_loki_push_api_endpoint_joined(
-        self: ops.CharmBase,
+        self,
         event: ops.RelationEvent,
         app_data: Optional[Union[Any, ValidationError]] = None,
         unit_data: Optional[Union[Any, ValidationError]] = None,
@@ -769,7 +769,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         """
         logger.debug("Setting loki push api")
 
-        loki_endpoints = self._loki_consumer.loki_endpoint
+        loki_endpoints = self._loki_consumer.loki_endpoints
         if not loki_endpoints:
             logger.debug("loki endpoints not initialized")
             return
@@ -777,28 +777,18 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         loki_api_url = loki_endpoints[0]["url"]
 
         incus.set_loki_endpoint(
-            incus.LokiConfigOptions(
-                loki_api_url=loki_api_url,
-                loki_loglevel="info",
-                loki_types="lifecycle,logging",
-            )
+            loki_api_url=loki_api_url,
         )
 
     def _on_loki_push_api_endpoint_departed(
-        self: ops.CharmBase,
+        self,
         event: ops.RelationEvent,
     ):
         """Handle the loki_push_api_endpoint_departed.
 
         Removes Loki endpoints from Incus.
         """
-        incus.set_loki_endpoint(
-            incus.LokiConfigOptions(
-                loki_api_url=None,
-                loki_loglevel=None,
-                loki_types=None,
-            )
-        )
+        incus.set_loki_endpoint()
 
     @data_models.validate_params(AddTrustedCertificateActionParams)
     def add_trusted_certificate_action(

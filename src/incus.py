@@ -51,14 +51,6 @@ class OvnConnectionOptions:
     northbound_connection: str
 
 
-@dataclass
-class LokiConfigOptions:
-    """Configuration options to set the loki configuration in Incus."""
-
-    loki_api_url: Optional[str]
-    loki_loglevel: Optional[str]
-    loki_types: Optional[str]
-
 
 class IncusProcessError(Exception):
     """Error raised when an Incus CLI command fails."""
@@ -262,7 +254,7 @@ def set_ovn_northbound_connection(options: OvnConnectionOptions):
     )
 
 
-def set_loki_endpoint(options: LokiConfigOptions):
+def set_loki_endpoint(loki_api_url Optional[str] = None):
     """Set Loki endpoint connection in Incus.
 
     The options include loglevel and types (a list of events that will be sent to Loki's server)
@@ -270,9 +262,7 @@ def set_loki_endpoint(options: LokiConfigOptions):
     run_command(
         "config",
         "set",
-        f"loki.api.url={options.loki_api_url}",
-        f"loki.loglevel={options.loki_loglevel}",
-        f"loki.types={options.loki_types}",
+        f"loki.api.url={loki_api_url}",
     )
 
 
