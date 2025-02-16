@@ -63,7 +63,7 @@ The full text of the DCO is provided below:
 
 ## Local development
 
-To make contributions to this charm, you'll need a working [development setup](https://juju.is/docs/sdk/dev-setup). If you're using [nix](https://nixos.org/), a `shell.nix` is provided with all system development dependencies.
+To make contributions to this charm, you'll need a working [development setup](https://canonical-juju.readthedocs-hosted.com/en/latest/user/howto/manage-your-deployment/manage-your-deployment-environment/). If you're using [nix](https://nixos.org/), a `shell.nix` is provided with all system development dependencies.
 
 The Python dependencies are also needed for local development. You can create a Python virtual environment with all dependencies needed for development with `tox`:
 
