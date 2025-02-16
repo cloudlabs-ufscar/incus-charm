@@ -1,3 +1,6 @@
+import sys
+from unittest.mock import MagicMock
+
 import pytest
 
 
@@ -24,3 +27,28 @@ uo2X0ZQJ9mItK1ddreRO9pY9H9RyIwXIn5YtYrcit/pFB3HDDlmIwXGIUS+FCrOO
 JRtVephE8skzsbl6LVHuoGM=
 -----END CERTIFICATE-----
     """.strip()
+
+
+# HACK: charmhelpers does some platform-specific checks at the module level
+# this means that if we import its modules on any OS other than Ubuntu or
+# CentOS we'll get a runtime error. To make the tests run on other systems,
+# we need to mock some of those modules.
+fake_modules = [
+    "charmhelpers",
+    "charmhelpers.contrib",
+    "charmhelpers.contrib.storage",
+    "charmhelpers.contrib.storage.linux",
+    "charmhelpers.contrib.storage.linux.ceph",
+    "charmhelpers.core",
+    "charmhelpers.fetch",
+    "charmhelpers.fetch.ubuntu",
+    "charmhelpers.fetch.ubuntu_apt_pkg",
+    "charmhelpers.osplatform",
+]
+for module_name in fake_modules:
+    sys.modules[module_name] = MagicMock(name=module_name)
+
+import charmhelpers.osplatform  # noqa: E402
+
+# Mock the platform inside the charmhelpers module
+charmhelpers.osplatform.get_platform.return_value = "ubuntu"
