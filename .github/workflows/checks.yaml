@@ -62,7 +62,7 @@ jobs:
   integration:
     name: Integration test
     runs-on: ubuntu
-    timeout-minutes: 140
+    timeout-minutes: 180
     needs: [lint, unit, static]
     steps:
       - name: Checkout

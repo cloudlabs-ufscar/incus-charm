@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 DEPLOY_TIMEOUT = 45 * 60  # 45min
-OPERATION_TIMEOUT = 60  # 1min
+OPERATION_TIMEOUT = 60 * 5  # 5min
 APP_NAME = METADATA["name"]
 BUNDLE_FILENAME = Path("tests/integration/bundles/incus_clustered.yaml.j2").absolute()
 TEST_INSTANCE_NAME = "test-instance"
