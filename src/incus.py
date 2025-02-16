@@ -19,8 +19,6 @@ CLIFormats = Literal["csv", "json", "table", "yaml", "compact"]
 IncusStorageDriver = Literal["dir", "btrfs", "zfs", "ceph"]
 IncusNetworkDriver = Literal["ovn"]
 IncusClientCertificateType = Literal["client", "metrics"]
-IncusLokiLogLevels = Literal["debug", "info", "warn", "error"]
-IncusLokiTypes = List[Literal["lifecycle", "logging", "network-acl"]]
 
 INCUS_VAR_DIR = Path("/var/lib/incus")
 
@@ -254,7 +252,7 @@ def set_ovn_northbound_connection(options: OvnConnectionOptions):
     )
 
 
-def set_loki_endpoint(loki_api_url Optional[str] = None):
+def set_loki_endpoint(loki_api_url: Optional[str] = None):
     """Set Loki endpoint connection in Incus.
 
     The options include loglevel and types (a list of events that will be sent to Loki's server)

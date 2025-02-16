@@ -119,6 +119,18 @@ config:
         Whether to enable the Incus Web UI.
       default: false
       type: boolean
+    loki-loglevel:
+      description: |
+        Minimum log level to send the Loki server.
+        It can be one of the following: "debug", "info", "warn", "error"
+      default: info
+      type: string
+    loki-types:
+      description: |
+        Comma-separated list of events to send to the Loki server.
+        It can be any combination of the following: "lifecycle", "logging", "network-acl"
+      default: lifecycle,logging
+      type: string  
 
 actions:
   add-trusted-certificate:

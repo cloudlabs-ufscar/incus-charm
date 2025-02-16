@@ -68,6 +68,8 @@ class IncusConfig(data_models.BaseConfigModel):
     package_repository_gpg_key: str
     set_failure_domain: bool
     enable_web_ui: bool
+    loki_loglevel: str
+    loki_types: str
 
     @validator("server_port", "cluster_port", "metrics_port")
     @classmethod
@@ -335,6 +337,8 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 incus.configure_storage(
                     "ceph", {"ceph.rbd.features": self.config.ceph_rbd_features}
                 )
+        incus.set_config("loki.loglevel", f"{self.config.loki_loglevel}")
+        incus.set_config("loki.types", f"{self.config.loki_types}")   
 
     def on_start(self, event: ops.StartEvent):
         """Handle start event.
