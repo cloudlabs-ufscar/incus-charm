@@ -11,8 +11,8 @@ import scenario
 from charm import IncusCharm
 
 
-def test_cluster_relation_created_leader_no_certificate():
-    """Test the cluster-relation-created event on leader units.
+def test_cluster_relation_joined_leader_no_certificate_relation():
+    """Test the cluster-relation-joined event on leader units.
 
     The unit should create the dictionary of join tokens, the list of created
     storage and put its certificate on the relation data.
@@ -27,16 +27,17 @@ def test_cluster_relation_created_leader_no_certificate():
         relation = scenario.PeerRelation(endpoint="cluster", interface="incus-cluster")
         state = scenario.State(leader=True, relations={relation})
 
-        out = ctx.run(ctx.on.relation_created(relation=relation), state)
+        out = ctx.run(ctx.on.relation_joined(relation=relation), state)
 
         relation = out.get_relation(relation.id)
         assert relation.local_app_data["tokens"] == "{}"
         assert relation.local_app_data["created-storage"] == "[]"
+        assert relation.local_app_data["created-network"] == "[]"
         assert relation.local_app_data["cluster-certificate"] == "any-certificate"
 
 
-def test_cluster_relation_created_leader():
-    """Test the cluster-relation-created event on leader units.
+def test_cluster_relation_joined_certificate_relation():
+    """Test the cluster-relation-joined event on leader units.
 
     The unit should create the dictionary of join tokens and the list of
     created storage.
@@ -61,15 +62,49 @@ def test_cluster_relation_created_leader():
                 },
             },
         )
-        cluster_relation = scenario.PeerRelation(endpoint="cluster", interface="incus-cluster")
-        state = scenario.State(leader=True, relations={certificates_relation, cluster_relation})
+        relation = scenario.PeerRelation(endpoint="cluster", interface="incus-cluster")
+        state = scenario.State(leader=True, relations={certificates_relation, relation})
 
-        out = ctx.run(ctx.on.relation_created(relation=cluster_relation), state)
+        out = ctx.run(ctx.on.relation_joined(relation=relation), state)
 
-        cluster_relation = out.get_relation(cluster_relation.id)
-        assert cluster_relation.local_app_data["tokens"] == "{}"
-        assert cluster_relation.local_app_data["created-storage"] == "[]"
+        relation = out.get_relation(relation.id)
+        assert relation.local_app_data["tokens"] == "{}"
+        assert relation.local_app_data["created-storage"] == "[]"
+        assert relation.local_app_data["created-network"] == "[]"
         get_server_certificate.assert_not_called()
+
+
+def test_cluster_relation_joined_leader_data_already_set():
+    """Test the cluster-relation-joined event on leader units when the relation data is already setup.
+
+    The unit should not override the application data.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._node_name", "any-node-name"),
+        patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.incus.get_server_certificate", return_value="any-certificate"),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            local_app_data={
+                "tokens": '{"any-node-name": "any-join-token-secret-id"}',
+                "created-storage": '["ceph"]',
+                "created-network": '["ovn"]',
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        state = scenario.State(leader=True, relations={relation})
+
+        out = ctx.run(ctx.on.relation_joined(relation=relation), state)
+
+        relation = out.get_relation(relation.id)
+        assert relation.local_app_data["tokens"] == '{"any-node-name": "any-join-token-secret-id"}'
+        assert relation.local_app_data["created-storage"] == '["ceph"]'
+        assert relation.local_app_data["created-network"] == '["ovn"]'
+        assert relation.local_app_data["cluster-certificate"] == "any-cluster-certificate"
 
 
 def test_cluster_relation_changed_leader_not_clustered():
