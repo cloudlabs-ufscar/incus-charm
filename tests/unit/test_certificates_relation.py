@@ -19,8 +19,8 @@ from charm import IncusCharm
 @pytest.mark.parametrize(
     "leader,is_clustered", [(False, False), (True, False), (False, True), (True, True)]
 )
-def test_certificates_relation_created(leader, is_clustered):
-    """Test the certificates-relation-created event.
+def test_certificates_relation_joined(leader, is_clustered):
+    """Test the certificates-relation-joined event.
 
     The unit should populate the relation data with the information needed
     to generate a new certificate.
@@ -49,7 +49,7 @@ def test_certificates_relation_created(leader, is_clustered):
             ],
         )
 
-        out = ctx.run(ctx.on.relation_created(relation=relation), state)
+        out = ctx.run(ctx.on.relation_joined(relation=relation), state)
 
         relation = out.get_relation(relation.id)
         assert relation.local_unit_data["unit_name"] == "incus_0"

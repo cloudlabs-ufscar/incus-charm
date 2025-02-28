@@ -9,7 +9,7 @@ import socket
 from dataclasses import asdict, dataclass
 from typing import List, Optional, Set
 
-from ops import RelationChangedEvent, RelationCreatedEvent, StoredState
+from ops import RelationChangedEvent, RelationJoinedEvent, StoredState
 from ops.charm import CharmBase, CharmEvents
 from ops.framework import EventBase, EventSource, Object
 
@@ -90,7 +90,7 @@ class TLSCertificatesRequires(Object):
         self.common_name = common_name
         self.relation_name = relation_name
 
-        self.framework.observe(charm.on[relation_name].relation_created, self._on_relation_created)
+        self.framework.observe(charm.on[relation_name].relation_joined, self._on_relation_joined)
         self.framework.observe(charm.on[relation_name].relation_changed, self._on_relation_changed)
 
         self._stored.set_default(certificate=None)
@@ -100,22 +100,26 @@ class TLSCertificatesRequires(Object):
         """The certificate issued for the current unit."""
         return self._get_certificate_from_relation_data()
 
-    def _on_relation_created(self, event: RelationCreatedEvent):
-        """Handle relation created event on the certificates relation.
+    def _on_relation_joined(self, event: RelationJoinedEvent):
+        """Handle relation joined event on the certificates relation.
 
         Writes the certificate request data to the relation.
         """
-        event.relation.data[self.charm.unit]["unit_name"] = self._unit_name
-        event.relation.data[self.charm.unit]["certificate_name"] = self.charm.app.name
-        event.relation.data[self.charm.unit]["common_name"] = self.common_name
-        if self.sans:
-            event.relation.data[self.charm.unit]["sans"] = json.dumps(self.sans)
-        logger.debug(
-            "Wrote cert request to the relation data. relation_name=%s common_name=%s sans=%s",
-            self.relation_name,
-            self.common_name,
-            self.sans,
-        )
+        relation_data = event.relation.data[self.charm.unit]
+
+        # If the data is not set on the relation, set it
+        if not {"unit_name", "certificate_name", "common_name"}.issubset(set(relation_data.keys())):
+            relation_data["unit_name"] = self._unit_name
+            relation_data["certificate_name"] = self.charm.app.name
+            relation_data["common_name"] = self.common_name
+            if self.sans:
+                event.relation.data[self.charm.unit]["sans"] = json.dumps(self.sans)
+            logger.debug(
+                "Wrote cert request to the relation data. relation_name=%s common_name=%s sans=%s",
+                self.relation_name,
+                self.common_name,
+                self.sans,
+            )
 
     def _on_relation_changed(self, event: RelationChangedEvent) -> None:
         """Handler triggerred on relation changed events."""
