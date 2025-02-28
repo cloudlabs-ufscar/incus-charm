@@ -162,7 +162,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         framework.observe(self.on.config_changed, self.on_config_changed)
         framework.observe(self.on.start, self.on_start)
         framework.observe(self.on.stop, self.on_stop)
-        framework.observe(self.on.cluster_relation_created, self.on_cluster_relation_created)
+        framework.observe(self.on.cluster_relation_joined, self.on_cluster_relation_joined)
         framework.observe(self.on.cluster_relation_changed, self.on_cluster_relation_changed)
         framework.observe(
             self.tls_certificates.on.certificate_changed, self.on_certificate_changed
@@ -353,7 +353,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         self.unit.status = ops.MaintenanceStatus("Uninstalling packages")
         self._uninstall_packages(self.package_name, self.web_ui_package_name)
 
-    def on_cluster_relation_created(self, event: ops.RelationCreatedEvent):
+    def on_cluster_relation_joined(self, event: ops.RelationJoinedEvent):
         """Handle cluster-relation-created event.
 
         The leader unit initializes the application data bag by creating the
@@ -363,15 +363,21 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         if not self.unit.is_leader():
             return
 
-        # NOTE: if there's a certificates relation, the certificate should
-        # be put in the relation data in response to a certificate-changed
-        # event. Otherwise, the cluster certificate will be the self-signed
-        # certificate of the leader unit.
-        if not self.model.get_relation("certificates"):
-            event.relation.data[event.app]["cluster-certificate"] = incus.get_server_certificate()
-        event.relation.data[event.app]["tokens"] = json.dumps({})
-        event.relation.data[event.app]["created-storage"] = json.dumps([])
-        event.relation.data[event.app]["created-network"] = json.dumps([])
+        relation_data = event.relation.data[self.app]
+
+        # If the data is not set on the relation, set it
+        if not {"tokens", "created-storage", "created-network"}.issubset(
+            set(relation_data.keys())
+        ):
+            relation_data["tokens"] = json.dumps({})
+            relation_data["created-storage"] = json.dumps([])
+            relation_data["created-network"] = json.dumps([])
+            # NOTE: if there's a certificates relation, the certificate should
+            # be put in the relation data in response to a certificate-changed
+            # event. Otherwise, the cluster certificate will be the self-signed
+            # certificate of the leader unit.
+            if not self.model.get_relation("certificates"):
+                relation_data["cluster-certificate"] = incus.get_server_certificate()
 
     @data_models.parse_relation_data(app_model=ClusterAppData, unit_model=ClusterUnitData)
     def on_cluster_relation_changed(
