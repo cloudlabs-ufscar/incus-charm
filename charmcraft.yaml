@@ -119,6 +119,62 @@ config:
         Whether to enable the Incus Web UI.
       default: false
       type: boolean
+    oidc-audience:
+      description: |
+        The expected audience value for the application.
+
+        For more information, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/server_config/#openid-connect-configuration
+      type: string
+    oidc-claim:
+      description: |
+        OpenID Connect claim to use as the username.
+
+        For more information, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/server_config/#openid-connect-configuration
+      type: string
+    oidc-client-id:
+      description: |
+        OpenID Connect client ID for the application.
+
+        For more information, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/server_config/#openid-connect-configuration
+      type: string
+    oidc-issuer:
+      description: |
+        OpenID Connect Discovery URL for the provider.
+
+        For more information, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/server_config/#openid-connect-configuration
+      type: string
+    oidc-scopes:
+      description: |
+        Comma separated list of OpenID Connect scopes.
+
+        For more information, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/server_config/#openid-connect-configuration
+      type: string
+    openfga-api-token:
+      description: |
+        API Token of the OpenFGA server.
+
+        For more information, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/server_config/#openfga-configuration
+      type: string
+    openfga-api-url:
+      description: |
+        URL of the OpenFGA server.
+
+        For more information, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/server_config/#openfga-configuration
+      type: string
+    openfga-store-id:
+      description: |
+        ID of the OpenFGA permission store.
+
+        For more information, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/server_config/#openfga-configuration
+      type: string
 
 actions:
   add-trusted-certificate:
