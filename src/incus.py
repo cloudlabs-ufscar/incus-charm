@@ -71,9 +71,13 @@ class IncusProcessError(Exception):
         return any(message in self.message for message in self.retryable_error_messages)
 
 
-def set_config(key: str, value: Union[str, int]):
-    """Set config `key` to `value` in the Incus daemon."""
-    run_command("config", "set", key, str(value))
+def set_config(configs: Dict[str, Optional[Union[str, int]]]):
+    """Set the given configs in the Incus daemon.
+
+    If any config value is `None`, the config will be unset in Incus.
+    """
+    keypairs = [f"{key}={value if value is not None else ''}" for key, value in configs.items()]
+    run_command("config", "set", *keypairs)
 
 
 def is_clustered() -> bool:
