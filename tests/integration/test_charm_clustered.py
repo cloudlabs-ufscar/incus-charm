@@ -365,6 +365,122 @@ async def test_enable_web_ui(ops_test: OpsTest):
 
 
 @pytest.mark.abort_on_fail
+async def test_auth_configs(ops_test: OpsTest):
+    """Test changing auth related settings via a config option.
+
+    All Incus servers should be updated.
+    """
+    assert ops_test.model, "No model found"
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+
+    # Set some partial configs
+    await application.set_config(
+        {"oidc-issuer": "any-issuer", "openfga-api-url": "http://any-url"}
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME],
+        status="active",
+        raise_on_blocked=True,
+        timeout=OPERATION_TIMEOUT,
+    )
+    for unit in application.units:
+        # HACK: Incus's first command always outputs a help message that breaks
+        # output parsing. To bypass this, we always run a dummy command first.
+        await ops_test.juju(*f"exec --unit {unit.name} -- incus info".split())
+        result_code, stdout, stderr = await ops_test.juju(
+            *f"exec --unit {unit.name} -- incus query /1.0".split()
+        )
+
+        assert result_code == 0, stderr
+        assert stderr == ""
+        assert stdout
+
+        output = json.loads(stdout)
+        config = output["config"]
+
+        assert config.get("oidc.issuer") == "any-issuer"
+        assert config.get("openfga.api.url") == "http://any-url"
+
+    # Set the remaining configs
+    await application.set_config(
+        {
+            "oidc-claim": "any-claim",
+            "oidc-audience": "any-audience",
+            "oidc-client-id": "any-client-id",
+            "oidc-scopes": "any-scopes",
+            "openfga-api-token": "any-token",
+            "openfga-store-id": "01JM5R8EB7VYH1QR626V97WBXF",
+        }
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME],
+        status="active",
+        raise_on_blocked=True,
+        timeout=OPERATION_TIMEOUT,
+    )
+    for unit in application.units:
+        result_code, stdout, stderr = await ops_test.juju(
+            *f"exec --unit {unit.name} -- incus query /1.0".split()
+        )
+
+        assert result_code == 0, stderr
+        assert stderr == ""
+        assert stdout
+
+        output = json.loads(stdout)
+        config = output["config"]
+
+        assert config.get("oidc.audience") == "any-audience"
+        assert config.get("oidc.issuer") == "any-issuer"
+        assert config.get("oidc.client.id") == "any-client-id"
+        assert config.get("oidc.scopes") == "any-scopes"
+        assert config.get("openfga.api.url") == "http://any-url"
+        assert config.get("openfga.api.token") == "any-token"
+        assert config.get("openfga.store.id") == "01JM5R8EB7VYH1QR626V97WBXF"
+
+    # Clear all configs
+    await application.set_config(
+        {
+            "oidc-claim": "",
+            "oidc-issuer": "",
+            "oidc-audience": "",
+            "oidc-client-id": "",
+            "oidc-scopes": "",
+            "openfga-api-token": "",
+            "openfga-store-id": "",
+            "openfga-api-url": "",
+        }
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME],
+        status="active",
+        raise_on_blocked=True,
+        timeout=OPERATION_TIMEOUT,
+    )
+    for unit in application.units:
+        result_code, stdout, stderr = await ops_test.juju(
+            *f"exec --unit {unit.name} -- incus query /1.0".split()
+        )
+
+        assert result_code == 0, stderr
+        assert stderr == ""
+        assert stdout
+
+        output = json.loads(stdout)
+        config = output["config"]
+
+        assert "oidc.audience" not in config
+        assert "oidc.issuer" not in config
+        assert "oidc.client.id" not in config
+        assert "oidc.scopes" not in config
+        assert "openfga.api.url" not in config
+        assert "openfga.api.token" not in config
+        assert "openfga.store.id" not in config
+
+
+@pytest.mark.abort_on_fail
 async def test_add_trusted_certificate(ops_test: OpsTest, tmp_path: Path):
     """Test adding a trusted certificate via the add-trusted-certificate action.
 
