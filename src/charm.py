@@ -67,6 +67,14 @@ class IncusConfig(data_models.BaseConfigModel):
     package_repository_gpg_key: str
     set_failure_domain: bool
     enable_web_ui: bool
+    oidc_audience: Optional[str] = None
+    oidc_claim: Optional[str] = None
+    oidc_client_id: Optional[str] = None
+    oidc_issuer: Optional[str] = None
+    oidc_scopes: Optional[str] = None
+    openfga_api_token: Optional[str] = None
+    openfga_api_url: Optional[str] = None
+    openfga_store_id: Optional[str] = None
 
     @validator("server_port", "cluster_port", "metrics_port")
     @classmethod
@@ -273,12 +281,12 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         public_binding = self.model.get_binding("public")
         if public_binding and public_binding.network.bind_address:
             public_address = str(public_binding.network.bind_address)
-        incus.set_config("core.https_address", f"{public_address}:{server_port}")
+        incus.set_config({"core.https_address": f"{public_address}:{server_port}"})
 
         # NOTE: Incus does not support changing the cluster.https_address if the
         # server is already part of a cluster.
         if not incus.is_clustered():
-            incus.set_config("cluster.https_address", self._cluster_address)
+            incus.set_config({"cluster.https_address": self._cluster_address})
 
         metrics_address = ""
         metrics_port = self.config.metrics_port
@@ -286,7 +294,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         if monitoring_binding and monitoring_binding.network.bind_address:
             metrics_address = str(monitoring_binding.network.bind_address)
         if metrics_address != public_address:
-            incus.set_config("core.metrics_address", f"{metrics_address}:{metrics_port}")
+            incus.set_config({"core.metrics_address": f"{metrics_address}:{metrics_port}"})
         self.unit.set_ports(ops.Port("tcp", metrics_port), ops.Port("tcp", server_port))
 
         if incus.is_clustered() and self.config.set_failure_domain:
@@ -323,6 +331,19 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 incus.configure_storage(
                     "ceph", {"ceph.rbd.features": self.config.ceph_rbd_features}
                 )
+
+        incus.set_config(
+            {
+                "oidc.audience": self.config.oidc_audience,
+                "oidc.claim": self.config.oidc_claim,
+                "oidc.client.id": self.config.oidc_client_id,
+                "oidc.issuer": self.config.oidc_issuer,
+                "oidc.scopes": self.config.oidc_scopes,
+                "openfga.api.token": self.config.openfga_api_token,
+                "openfga.api.url": self.config.openfga_api_url,
+                "openfga.store.id": self.config.openfga_store_id,
+            }
+        )
 
     def on_start(self, event: ops.StartEvent):
         """Handle start event.
