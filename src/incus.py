@@ -49,6 +49,7 @@ class OvnConnectionOptions:
     northbound_connection: str
 
 
+
 class IncusProcessError(Exception):
     """Error raised when an Incus CLI command fails."""
 
@@ -248,6 +249,18 @@ def set_ovn_northbound_connection(options: OvnConnectionOptions):
         f"network.ovn.client_cert={options.client_cert}",
         f"network.ovn.client_key={options.client_key}",
         f"network.ovn.northbound_connection={options.northbound_connection}",
+    )
+
+
+def set_loki_endpoint(loki_api_url: Optional[str] = None):
+    """Set Loki endpoint connection in Incus.
+
+    The options include loglevel and types (a list of events that will be sent to Loki's server)
+    """
+    run_command(
+        "config",
+        "set",
+        f"loki.api.url={loki_api_url}",
     )
 
 
