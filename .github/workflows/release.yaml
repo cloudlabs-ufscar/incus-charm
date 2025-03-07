@@ -30,3 +30,6 @@ jobs:
           channel: "${{ inputs.channel }}"
           credentials: "${{ secrets.CHARMHUB_TOKEN }}"
           github-token: "${{ secrets.GITHUB_TOKEN }}"
+          upload-image: false
+          pull-image: false
+          github-tag: false
