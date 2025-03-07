@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Charmhub channel
+        required: true
+        default: edge
+        type: choice
+        options:
+        - edge
+        - beta
+        - stable
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Upload charm to charmhub
+        uses: canonical/charming-actions/upload-charm@2.7.0
+        with:
+          channel: "${{ inputs.channel }}"
+          credentials: "${{ secrets.CHARMHUB_TOKEN }}"
