@@ -18,6 +18,7 @@ import charms.operator_libs_linux.v1.systemd as systemd
 import charms.tls_certificates_interface.v0.tls_certificates as tls_certificates
 import ops
 import requests
+from charms.loki_k8s.v1.loki_push_api import LokiPushApiConsumer
 from pydantic import ValidationError, validator
 
 import ceph
@@ -67,6 +68,8 @@ class IncusConfig(data_models.BaseConfigModel):
     package_repository_gpg_key: str
     set_failure_domain: bool
     enable_web_ui: bool
+    loki_loglevel: str
+    loki_types: str
 
     @validator("server_port", "cluster_port", "metrics_port")
     @classmethod
@@ -146,6 +149,9 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
 
+        # Instantiating LokiPushApiConsumer object
+        self._loki_consumer = LokiPushApiConsumer(self)
+
         # Certificate request
         sans = []
         for binding_name in ("public", "cluster"):
@@ -171,6 +177,14 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         framework.observe(self.on.ceph_relation_changed, self.on_ceph_relation_changed)
         framework.observe(self.on.ovsdb_cms_relation_created, self.on_ovsdb_cms_relation_created)
         framework.observe(self.on.ovsdb_cms_relation_changed, self.on_ovsdb_cms_relation_changed)
+        framework.observe(
+            self._loki_consumer.on.loki_push_api_endpoint_joined,
+            self._on_loki_push_api_endpoint_joined,
+        )
+        framework.observe(
+            self._loki_consumer.on.loki_push_api_endpoint_departed,
+            self._on_loki_push_api_endpoint_departed,
+        )
 
         # Actions
         framework.observe(
@@ -323,6 +337,8 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 incus.configure_storage(
                     "ceph", {"ceph.rbd.features": self.config.ceph_rbd_features}
                 )
+        incus.set_config("loki.loglevel", f"{self.config.loki_loglevel}")
+        incus.set_config("loki.types", f"{self.config.loki_types}")   
 
     def on_start(self, event: ops.StartEvent):
         """Handle start event.
@@ -749,6 +765,40 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             logger.debug("OVN connection options not available. Skipping event. event=%s", event)
             return
         self._configure_ovn_connection(event, connection_options)
+
+    #    @data_models.parse_relation_data(unit_model=)
+    def _on_loki_push_api_endpoint_joined(
+        self,
+        event: ops.RelationEvent,
+        app_data: Optional[Union[Any, ValidationError]] = None,
+        unit_data: Optional[Union[Any, ValidationError]] = None,
+    ):
+        """Handle the loki_push_api_endpoint_joined.
+
+        Fetches loki endpoints and set Incus.
+        """
+        logger.debug("Setting loki push api")
+
+        loki_endpoints = self._loki_consumer.loki_endpoints
+        if not loki_endpoints:
+            logger.debug("loki endpoints not initialized")
+            return
+
+        loki_api_url = loki_endpoints[0]["url"]
+
+        incus.set_loki_endpoint(
+            loki_api_url=loki_api_url,
+        )
+
+    def _on_loki_push_api_endpoint_departed(
+        self,
+        event: ops.RelationEvent,
+    ):
+        """Handle the loki_push_api_endpoint_departed.
+
+        Removes Loki endpoints from Incus.
+        """
+        incus.set_loki_endpoint()
 
     @data_models.validate_params(AddTrustedCertificateActionParams)
     def add_trusted_certificate_action(
