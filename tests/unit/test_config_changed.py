@@ -46,8 +46,8 @@ def test_config_changed_not_clustered(server_port, cluster_port):
 
         set_config.assert_has_calls(
             [
-                call("core.https_address", f"10.0.0.1:{server_port}"),
-                call("cluster.https_address", f"10.0.0.2:{cluster_port}"),
+                call({"core.https_address": f"10.0.0.1:{server_port}"}),
+                call({"cluster.https_address": f"10.0.0.2:{cluster_port}"}),
             ]
         )
 
@@ -88,7 +88,7 @@ def test_config_changed_not_clustered_expose_metrics_endpoints(metrics_port):
 
         set_config.assert_has_calls(
             [
-                call("core.metrics_address", f"10.0.0.3:{metrics_port}"),
+                call({"core.metrics_address": f"10.0.0.3:{metrics_port}"}),
             ]
         )
 
@@ -123,7 +123,7 @@ def test_config_changed_clustered(server_port, cluster_port):
 
         set_config.assert_has_calls(
             [
-                call("core.https_address", f"10.0.0.1:{server_port}"),
+                call({"core.https_address": f"10.0.0.1:{server_port}"}),
             ]
         )
 
@@ -157,7 +157,7 @@ def test_config_changed_clustered_expose_metrics_endpoints(metrics_port):
 
         set_config.assert_has_calls(
             [
-                call("core.metrics_address", f"10.0.0.3:{metrics_port}"),
+                call({"core.metrics_address": f"10.0.0.3:{metrics_port}"}),
             ]
         )
 
@@ -587,3 +587,65 @@ def test_config_changed_disable_web_ui(package_installed):
         else:
             uninstall_packages.assert_not_called()
             install_packages.assert_not_called()
+
+
+def test_config_changed_auth():
+    """Test the config-changed event when auth related config options are set.
+
+    The unit should set the config options in Incus.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", return_value=False),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
+        patch("charm.incus.set_config") as set_config,
+        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.get_cluster_member_info"),
+    ):
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            local_app_data={
+                "tokens": "{}",
+                "created-storage": "[]",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            leader=True,
+            relations={cluster_relation},
+            config={
+                "oidc-audience": "any-audience",
+                "oidc-claim": "any-claim",
+                "oidc-client-id": "any-client-id",
+                "oidc-issuer": "any-issuer",
+                "oidc-scopes": "any-scopes",
+                "openfga-api-token": "any-token",
+                "openfga-api-url": "any-url",
+                "openfga-store-id": "any-store-id",
+            },
+        )
+
+        ctx.run(ctx.on.config_changed(), state)
+
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+            scenario.MaintenanceStatus("Changing config"),
+        ]
+
+        set_config.assert_has_calls(
+            [
+                call(
+                    {
+                        "oidc.audience": "any-audience",
+                        "oidc.claim": "any-claim",
+                        "oidc.client.id": "any-client-id",
+                        "oidc.issuer": "any-issuer",
+                        "oidc.scopes": "any-scopes",
+                        "openfga.api.token": "any-token",
+                        "openfga.api.url": "any-url",
+                        "openfga.store.id": "any-store-id",
+                    }
+                )
+            ]
+        )
