@@ -119,6 +119,48 @@ config:
         Whether to enable the Incus Web UI.
       default: false
       type: boolean
+    create-local-storage-pool:
+      description: |
+        Whether to create a local storage pool.
+      type: boolean
+      default: true
+    local-storage-pool-driver:
+      description: |
+        The storage driver to use for the local storage pool.
+
+        Acceptable values are: "dir", "btrfs" and "zfs".
+      type: string
+      default: zfs
+    local-storage-pool-device:
+      description: |
+        The block device in which to create the local storage pool.
+
+        Can be either device name such as "sdx" or the full path to
+        the device such as "/dev/sdx".
+
+        This config option takes precedence over the `local` storage. When
+        this option is not specified and no storage is provided, a loop
+        device or directory on the root disk will be created for the storage
+        pool, depending on the driver specified by `local-storage-pool-driver`.
+      type: string
+     # default: \-
+
+storage:
+  local:
+    type: block
+    description: |
+      Block device that will be used to create the local storage pool if
+      specified by `create-local-storage-pool`.
+
+      This device will not be used if the `local-storage-pool-device` is specified.
+
+      When no storage is provided and the config option `local-storage-pool-device`
+      is not specified, a loop device or directory on the root disk will be created
+      for the storage pool, depending on the driver specified by
+      `local-storage-pool-driver`.
+    minimum-size: 5G
+    multiple:
+      range: 0-1
 
 actions:
   add-trusted-certificate:

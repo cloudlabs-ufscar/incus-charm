@@ -67,6 +67,9 @@ class IncusConfig(data_models.BaseConfigModel):
     package_repository_gpg_key: str
     set_failure_domain: bool
     enable_web_ui: bool
+    create_local_storage_pool: bool
+    local_storage_pool_driver: str
+    local_storage_pool_device: Optional[str]
 
     @validator("server_port", "cluster_port", "metrics_port")
     @classmethod
@@ -138,7 +141,11 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
 
     package_name = "incus"
     service_name = "incus"
-    ceph_package_name = "ceph-common"
+    storage_driver_packages = {
+        'ceph': 'ceph-common',
+        'zfs': 'zfsutils-linux',
+        'lvm': 'lvm2',
+    }
     web_ui_package_name = "incus-ui-canonical"
 
     config_type = IncusConfig
@@ -253,7 +260,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
 
         packages = [self.package_name]
         if self.model.get_relation("ceph"):
-            packages.append(self.ceph_package_name)
+            packages.append(self.storage_driver_packages.get("ceph"))
 
         if self.config.enable_web_ui:
             packages.append(self.web_ui_package_name)
@@ -530,26 +537,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         Ensures that the local incus service supports the Ceph storage driver, and
         installs the required packages if needed.
         """
-        supported_storage_drivers = incus.get_supported_storage_drivers()
-        if "ceph" not in supported_storage_drivers:
-            logger.debug(
-                "Ceph storage driver not currently supported by Incus. Will install needed packages. supported_storage_drivers=%s",
-                supported_storage_drivers,
-            )
-            self.unit.status = ops.MaintenanceStatus(
-                f"Installing {self.ceph_package_name} package"
-            )
-            self._install_packages(self.ceph_package_name)
-            # NOTE: Since Incus checks for supported storage drivers at startup,
-            # we need to restart the service to update the supported storage drivers
-            self.unit.status = ops.MaintenanceStatus(f"Restarting {self.service_name} service")
-            self._restart_service(self.service_name)
-            logger.info(
-                "Installed required Ceph packages. package_name=%s", self.ceph_package_name
-            )
-
-        supported_storage_drivers = incus.get_supported_storage_drivers()
-        assert "ceph" in supported_storage_drivers, "Failed to enable Ceph support on Incus"
+        self._install_storage_package("ceph")
 
     @data_models.parse_relation_data(unit_model=CephUnitData)
     def on_ceph_relation_changed(
@@ -710,6 +698,23 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             logger.warning(
                 "Could not set cms-client-bound-address on ovsdb-cms relation. No IP address available for ovsdb-cms binding."
             )
+
+    def _create_local_storage_pool(self):
+        """Create a local storage pool in the Incus cluster."""
+        local_storage_driver = self.config.local_storage_pool_driver
+        self._install_storage_package(local_storage_driver)
+        logger.info(
+            "Creating local storage pool"
+        )
+        # Only treating non-clustered case
+        if not incus.is_clustered():
+            incus.create_storage(
+                pool_name="default",
+                storage_driver=local_storage_driver,
+                source=self.config.local_storage_pool_device,
+            )
+            logger.info("Local storage pool created.")
+            return
 
     @data_models.parse_relation_data(unit_model=OvnCentralUnitData)
     def on_ovsdb_cms_relation_changed(
@@ -1037,15 +1042,6 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                     },
                 },
             ],
-            # TODO: make the creation of storage pools configurable
-            "storage_pools": [
-                {
-                    "name": "default",
-                    "description": "Default storage pool",
-                    "driver": "btrfs",
-                    "config": {"size": "5GiB"},
-                },
-            ],
             "profiles": [
                 {
                     "name": "default",
@@ -1070,6 +1066,9 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         }
         try:
             incus.bootstrap_node(preseed)
+            if self.config.create_local_storage_pool:
+                self._create_local_storage_pool()
+
         except incus.IncusProcessError as error:
             if not error.is_retryable:
                 raise error
@@ -1078,6 +1077,32 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 error,
             )
         logger.info("Incus server bootstrapped")
+
+    def _install_storage_package(self, storage_driver: str):
+        """Install storage package """
+        supported_storage_drivers = incus.get_supported_storage_drivers()
+        storage_package = self.storage_driver_packages.get(storage_driver)
+        if storage_driver not in supported_storage_drivers and storage_driver in self.storage_driver_packages:
+            logger.debug(
+                "%s storage driver not currently supported by Incus. Will install needed packages. supported_storage_drivers=%s",
+                storage_driver,
+                supported_storage_drivers,
+            )
+            logger.debug(
+                f"Installing {storage_package} package"
+            )
+            self._install_packages(storage_package)
+            # NOTE: Since Incus checks for supported storage drivers at startup,
+            # we need to restart the service to update the supported storage drivers
+            logger.debug(f"Restarting {self.service_name} service")
+            self._restart_service(self.service_name)
+            logger.info(
+                "Installed required %s packages. package_name=%s",
+                storage_driver,
+                storage_package,
+            )
+        supported_storage_drivers = incus.get_supported_storage_drivers()
+        assert storage_driver in supported_storage_drivers, (f"Failed to enable %s support on Incus", storage_driver)
 
     def _set_failure_domain(self):
         """Set the current node failure domain."""
