@@ -259,6 +259,10 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         )
 
         packages = [self.package_name]
+
+        if self.config.create_local_storage_pool:
+            packages.append(self.storage_driver_packages.get(self.config.local_storage_pool_driver))
+
         if self.model.get_relation("ceph"):
             packages.append(self.storage_driver_packages.get("ceph"))
 
@@ -699,23 +703,6 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 "Could not set cms-client-bound-address on ovsdb-cms relation. No IP address available for ovsdb-cms binding."
             )
 
-    def _create_local_storage_pool(self):
-        """Create a local storage pool in the Incus cluster."""
-        local_storage_driver = self.config.local_storage_pool_driver
-        self._install_storage_package(local_storage_driver)
-        logger.info(
-            "Creating local storage pool"
-        )
-        # Only treating non-clustered case
-        if not incus.is_clustered():
-            incus.create_storage(
-                pool_name="default",
-                storage_driver=local_storage_driver,
-                source=self.config.local_storage_pool_device,
-            )
-            logger.info("Local storage pool created.")
-            return
-
     @data_models.parse_relation_data(unit_model=OvnCentralUnitData)
     def on_ovsdb_cms_relation_changed(
         self: ops.CharmBase,
@@ -1028,6 +1015,41 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 "server_address": self._cluster_address,
             }
         )
+
+        profile_devices = {
+            "eth0": 
+            {
+                "name": "eth0",
+                "network": "incusbr0",
+                "type": "nic",
+            }
+        }  
+
+        local_storage_pool = (
+            [
+                {
+                    "name": "default",
+                    "description": "Default storage pool",
+                    "driver": self.config.local_storage_pool_driver,
+                    "config": (
+                        {"size": "5GiB"}
+                        | ({"source": self.config.local_storage_pool_device} # Add source only if present
+                            if self.config.local_storage_pool_device 
+                            else {})
+                     )
+                }
+            ]
+            if self.config.create_local_storage_pool
+            else None
+        )
+
+        if local_storage_pool:
+            profile_devices["root"] = {
+                "path": "/",
+                "pool": "default",
+                "type": "disk",
+            }
+
         preseed = {
             # TODO: make the creation of networks configurable
             "networks": [
@@ -1047,27 +1069,15 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                     "name": "default",
                     "description": "Default profile",
                     "config": {},
-                    "devices": {
-                        "eth0": {
-                            "name": "eth0",
-                            "network": "incusbr0",
-                            "type": "nic",
-                        },
-                        "root": {
-                            "path": "/",
-                            "pool": "default",
-                            "type": "disk",
-                        },
-                    },
+                    "devices": profile_devices,
                 },
             ],
+            "storage_pools": local_storage_pool,
             "projects": [],
             "cluster": cluster_info,
         }
         try:
             incus.bootstrap_node(preseed)
-            if self.config.create_local_storage_pool:
-                self._create_local_storage_pool()
 
         except incus.IncusProcessError as error:
             if not error.is_retryable:

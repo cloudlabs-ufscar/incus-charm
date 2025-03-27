@@ -143,24 +143,6 @@ config:
         device or directory on the root disk will be created for the storage
         pool, depending on the driver specified by `local-storage-pool-driver`.
       type: string
-     # default: \-
-
-storage:
-  local:
-    type: block
-    description: |
-      Block device that will be used to create the local storage pool if
-      specified by `create-local-storage-pool`.
-
-      This device will not be used if the `local-storage-pool-device` is specified.
-
-      When no storage is provided and the config option `local-storage-pool-device`
-      is not specified, a loop device or directory on the root disk will be created
-      for the storage pool, depending on the driver specified by
-      `local-storage-pool-driver`.
-    minimum-size: 5G
-    multiple:
-      range: 0-1
 
 actions:
   add-trusted-certificate:
