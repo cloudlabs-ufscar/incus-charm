@@ -259,6 +259,67 @@ async def test_ovn_northbound_config(ops_test: OpsTest):
 
 
 @pytest.mark.abort_on_fail
+async def test_networks(ops_test: OpsTest):
+    """Test the configured networks.
+
+    All units should have a local bridge and a OVN network.
+    """
+    assert ops_test.model, "No model found"
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+    for unit in application.units:
+        await ops_test.juju(*f"exec --unit {unit.name} -- incus info".split())
+        result_code, stdout, stderr = await ops_test.juju(
+            *f"exec --unit {unit.name} -- incus query /1.0/networks?recursion=1".split()
+        )
+
+        assert result_code == 0, stderr
+        assert stderr == ""
+        assert stdout
+
+        networks = json.loads(stdout)
+        incusbr_networks = [network for network in networks if network["name"] == "incusbr0"]
+        assert len(incusbr_networks) == 1
+        incusbr_network = incusbr_networks[0]
+        assert incusbr_network["type"] == "bridge"
+        assert incusbr_network["status"] == "Created"
+        assert incusbr_network["project"] == "default"
+        assert len(incusbr_network["locations"]) == len(application.units), (
+            "Network not created on all cluster members"
+        )
+
+        uplink_networks = [network for network in networks if network["name"] == "UPLINK"]
+        assert len(uplink_networks) == 1
+        uplink_network = uplink_networks[0]
+        assert uplink_network["type"] == "bridge"
+        assert uplink_network["status"] == "Created"
+        assert len(uplink_network["used_by"]) == 1, (
+            "Expected UPLINK network to be used by the OVN network"
+        )
+        assert uplink_network["used_by"][0] == "/1.0/networks/ovn", (
+            "Expected UPLINK network to be used by the OVN network"
+        )
+        assert len(uplink_network["locations"]) == len(application.units), (
+            "Network not created on all cluster members"
+        )
+        assert uplink_network["config"].get("ipv4.address") == "10.179.176.1/24"
+        assert uplink_network["config"].get("ipv4.nat") == "true"
+        assert uplink_network["config"].get("ipv4.dhcp") == "false"
+        assert uplink_network["config"].get("ipv4.ovn.ranges") == "10.179.176.2-10.179.176.254"
+
+        ovn_networks = [network for network in networks if network["type"] == "ovn"]
+        assert len(ovn_networks) == 1
+        ovn_network = ovn_networks[0]
+        assert ovn_network["name"] == "ovn"
+        assert ovn_network["status"] == "Created"
+        assert ovn_network["config"].get("network") == "UPLINK"
+        assert ovn_network["config"].get("ipv4.nat") == "true"
+        assert "volatile.network.ipv4.address" in ovn_network["config"]
+        assert "ipv4.address" in ovn_network["config"]
+
+
+@pytest.mark.abort_on_fail
 @pytest.mark.parametrize("port", (8888, 8443))
 async def test_change_port(ops_test: OpsTest, port: int):
     """Test changing the server port via a config option.
@@ -599,6 +660,7 @@ async def test_add_unit(ops_test: OpsTest, tmp_path: Path):
     await test_cluster_state(ops_test)
     await test_storage_pools(ops_test)
     await test_ovn_northbound_config(ops_test)
+    await test_networks(ops_test)
 
 
 @pytest.mark.abort_on_fail
@@ -674,6 +736,7 @@ async def test_remove_unit(ops_test: OpsTest, tmp_path: Path):
     await test_cluster_state(ops_test)
     await test_storage_pools(ops_test)
     await test_ovn_northbound_config(ops_test)
+    await test_networks(ops_test)
 
 
 @pytest.mark.abort_on_fail
@@ -711,6 +774,7 @@ async def test_reissue_certificates(ops_test: OpsTest, tmp_path: Path):
     await test_cluster_state(ops_test)
     await test_storage_pools(ops_test)
     await test_ovn_northbound_config(ops_test)
+    await test_networks(ops_test)
 
     # Get the new certificates
     new_certificates: Set[str] = set()

@@ -9,7 +9,7 @@ import json
 import logging
 import os
 import socket
-from typing import Any, Dict, List, Optional, Set, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Set, Union, cast
 
 import charmhelpers.contrib.storage.linux.ceph as ceph_client
 import charms.data_platform_libs.v0.data_models as data_models
@@ -32,7 +32,8 @@ class ClusterAppData(data_models.RelationDataModel):
     tokens: Dict[str, str]
     cluster_certificate: str
     created_storage: Set[incus.IncusStorageDriver]
-    created_network: Set[incus.IncusNetworkDriver]
+    created_network: Set[incus.IncusNetworkType]
+    ovn_nb_connection_ready: Optional[bool] = None
 
 
 class ClusterUnitData(data_models.RelationDataModel):
@@ -40,6 +41,7 @@ class ClusterUnitData(data_models.RelationDataModel):
 
     node_name: str
     joined_cluster_at: Optional[str]
+    ovn_uplink_interface: Optional[str]
 
 
 class CephUnitData(data_models.RelationDataModel, extra="ignore"):
@@ -75,6 +77,10 @@ class IncusConfig(data_models.BaseConfigModel):
     openfga_api_token: Optional[str] = None
     openfga_api_url: Optional[str] = None
     openfga_store_id: Optional[str] = None
+    ovn_uplink_network_type: Literal["physical", "bridge"]
+    ovn_uplink_network_parent_interface: Optional[str] = None
+    ovn_uplink_network_config: Optional[Dict[str, Optional[str]]] = None
+    ovn_network_config: Optional[Dict[str, Optional[str]]] = None
 
     @validator("server_port", "cluster_port", "metrics_port")
     @classmethod
@@ -84,6 +90,24 @@ class IncusConfig(data_models.BaseConfigModel):
         if not (0 <= port <= max_port_number):
             raise ValueError("A port value should be an integer between 0 and 65535")
         return port
+
+    @validator("ovn_uplink_network_config", "ovn_network_config", pre=True)
+    @classmethod
+    def parse_key_pairs(cls, value):
+        """Parse a space separated string of key-value pairs (e.g. `"key1=value key2=another-value"`) into a dictionary."""
+        if isinstance(value, str):
+            parsed: Dict[str, Optional[str]] = {}
+            for pair in value.strip().split():
+                split = pair.split("=")
+                if len(split) != 2:
+                    raise ValueError(f"Invalid keypair format on OVN uplink config: {pair}")
+
+                key, value = split
+                parsed[key] = value
+
+            return parsed
+
+        return value
 
 
 class ClusterListActionParams(data_models.BaseConfigModel):
@@ -225,7 +249,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                                 ops.WaitingStatus("Waiting for Ceph storage pool creation")
                             )
 
-                if not self._is_ovn_ready(cluster_data):
+                if not self._is_ovn_ready(cluster_data) and self.unit.is_leader():
                     event.add_status(
                         ops.WaitingStatus("Waiting for OVN northbound connection configuration")
                     )
@@ -375,7 +399,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         self._uninstall_packages(self.package_name, self.web_ui_package_name)
 
     def on_cluster_relation_joined(self, event: ops.RelationJoinedEvent):
-        """Handle cluster-relation-created event.
+        """Handle cluster-relation-joined event.
 
         The leader unit initializes the application data bag by creating the
         dictionary for the join tokens and the cluster certificate, if one is
@@ -499,6 +523,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             cluster_certificate = app_data.cluster_certificate
             self._bootstrap_incus(join_token=token, cluster_certificate=cluster_certificate)
             self._set_failure_domain()
+
             logger.info("Joined cluster. node_name=%s", self._node_name)
             event.relation.data[self.unit]["joined-cluster-at"] = datetime.datetime.now(
                 datetime.timezone.utc
@@ -547,7 +572,30 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             connection_options = self._get_ovn_connection_options()
             if connection_options:
                 logger.debug("OVN connection options available. Will configure OVN connection.")
-                self._configure_ovn_connection(event, connection_options)
+                if not self._configure_ovn_connection(connection_options):
+                    logger.warning(
+                        "Could not set OVN northbound connection options. Deferring event. event=%s",
+                        event,
+                    )
+                    return event.defer()
+
+                cluster_relation = self.model.get_relation("cluster")
+                assert cluster_relation, "Cluster peer relation does not exist."
+                created_networks: Set[incus.IncusNetworkType] = set()
+                try:
+                    data = cast(
+                        ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app])
+                    )
+                    created_networks = data.created_network
+                except ValidationError as error:
+                    logger.debug(
+                        "Could not validate application data when creating OVN network. Deferring the event. error=%s",
+                        error,
+                    )
+                    return event.defer()
+
+                if "ovn" not in created_networks:
+                    self._create_ovn_network()
 
         logger.info("Certificate applied")
 
@@ -653,7 +701,6 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 )
                 return
 
-            self.unit.status = ops.MaintenanceStatus("Creating Ceph storage pool on Incus")
             self._create_ceph_storage_pool(ceph_pool_name, self._ceph_user)
             created_storage.add("ceph")
             cluster_relation.data[self.app]["created-storage"] = json.dumps(list(created_storage))
@@ -667,6 +714,8 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         logger.info(
             "Creating Ceph storage pool. ceph_pool_name=%s ceph_user=%s", ceph_pool_name, ceph_user
         )
+        self.unit.status = ops.MaintenanceStatus("Creating Ceph storage pool")
+
         pool_config = {
             "ceph.user.name": ceph_user,
             "ceph.rbd.features": self.config.ceph_rbd_features,
@@ -769,7 +818,28 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         if not connection_options:
             logger.debug("OVN connection options not available. Skipping event. event=%s", event)
             return
-        self._configure_ovn_connection(event, connection_options)
+        if not self._configure_ovn_connection(connection_options):
+            logger.warning(
+                "Could not set OVN northbound connection options. Deferring event. event=%s",
+                event,
+            )
+            return event.defer()
+
+        cluster_relation = self.model.get_relation("cluster")
+        assert cluster_relation, "Cluster peer relation does not exist."
+        created_networks: Set[incus.IncusNetworkType] = set()
+        try:
+            data = cast(ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app]))
+            created_networks = data.created_network
+        except ValidationError as error:
+            logger.debug(
+                "Could not validate application data when creating OVN network. Deferring the event. error=%s",
+                error,
+            )
+            return event.defer()
+
+        if "ovn" not in created_networks:
+            self._create_ovn_network()
 
     @data_models.validate_params(AddTrustedCertificateActionParams)
     def add_trusted_certificate_action(
@@ -1040,61 +1110,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         """
         self.unit.status = ops.MaintenanceStatus("Bootstrapping Incus")
         logger.info("Bootstrapping Incus")
-        cluster_info = (
-            None
-            if join_token is None
-            else {
-                "enabled": True,
-                "cluster_token": join_token,
-                "cluster_certificate": cluster_certificate,
-                "server_address": self._cluster_address,
-            }
-        )
-        preseed = {
-            # TODO: make the creation of networks configurable
-            "networks": [
-                {
-                    "name": "incusbr0",
-                    "description": "Default network",
-                    "type": "",
-                    "project": "default",
-                    "config": {
-                        "ipv4.address": "auto",
-                        "ipv6.address": "auto",
-                    },
-                },
-            ],
-            # TODO: make the creation of storage pools configurable
-            "storage_pools": [
-                {
-                    "name": "default",
-                    "description": "Default storage pool",
-                    "driver": "btrfs",
-                    "config": {"size": "5GiB"},
-                },
-            ],
-            "profiles": [
-                {
-                    "name": "default",
-                    "description": "Default profile",
-                    "config": {},
-                    "devices": {
-                        "eth0": {
-                            "name": "eth0",
-                            "network": "incusbr0",
-                            "type": "nic",
-                        },
-                        "root": {
-                            "path": "/",
-                            "pool": "default",
-                            "type": "disk",
-                        },
-                    },
-                },
-            ],
-            "projects": [],
-            "cluster": cluster_info,
-        }
+        preseed = self._generate_preseed_data(join_token, cluster_certificate)
         try:
             incus.bootstrap_node(preseed)
         except incus.IncusProcessError as error:
@@ -1105,6 +1121,102 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 error,
             )
         logger.info("Incus server bootstrapped")
+
+    def _generate_preseed_data(
+        self, join_token: Optional[str] = None, cluster_certificate: Optional[str] = None
+    ) -> Dict:
+        if not join_token:
+            logger.info("Join token not provided. Will bootstrap a new cluster")
+            return {
+                # TODO: make the creation of networks configurable
+                "networks": [
+                    {
+                        "name": "incusbr0",
+                        "description": "Default network",
+                        "type": "",
+                        "project": "default",
+                        "config": {
+                            "ipv4.address": "auto",
+                            "ipv6.address": "auto",
+                        },
+                    },
+                ],
+                # TODO: make the creation of storage pools configurable
+                "storage_pools": [
+                    {
+                        "name": "default",
+                        "description": "Default storage pool",
+                        "driver": "btrfs",
+                        "config": {"size": "5GiB"},
+                    },
+                ],
+                "profiles": [
+                    {
+                        "name": "default",
+                        "description": "Default profile",
+                        "config": {},
+                        "devices": {
+                            "eth0": {
+                                "name": "eth0",
+                                "network": "incusbr0",
+                                "type": "nic",
+                            },
+                            "root": {
+                                "path": "/",
+                                "pool": "default",
+                                "type": "disk",
+                            },
+                        },
+                    },
+                ],
+                "projects": [],
+            }
+
+        logger.info("Join token provided. Will join an existing cluster")
+        preseed = {
+            "cluster": {
+                "enabled": True,
+                "cluster_token": join_token,
+                "cluster_certificate": cluster_certificate,
+                "server_address": self._cluster_address,
+                "member_config": [
+                    # {
+                    #     "entity": "storage-pool",
+                    #     "name": "default",
+                    # },
+                    # {
+                    #     "entity": "network",
+                    #     "name": "incusbr0",
+                    # },
+                ],
+            }
+        }
+
+        cluster_relation = self.model.get_relation("cluster")
+        assert cluster_relation, "Cluster peer relation does not exist."
+        data = cast(ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app]))
+
+        # If the OVN network is already created, include the uplink network config
+        # on the preseed data
+        if "ovn" in data.created_network:
+            if self.config.ovn_uplink_network_type == "physical":
+                assert self.config.ovn_uplink_network_parent_interface, (
+                    "Uplink parent interface must be set on the config since the uplink network type is set to 'physical'"
+                )
+                logger.info(
+                    "Joining cluster with an existing OVN network. Will add uplink network local config to preseed data. source=%s",
+                    self.config.ovn_uplink_network_parent_interface,
+                )
+                preseed["cluster"]["member_config"].append(
+                    {
+                        "entity": "network",
+                        "name": "UPLINK",
+                        "key": "parent",
+                        "value": self.config.ovn_uplink_network_parent_interface,
+                    }
+                )
+
+        return preseed
 
     def _set_failure_domain(self):
         """Set the current node failure domain."""
@@ -1215,10 +1327,10 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         the OVN northbound connection.
         """
         # NOTE: if a ovsdb-cms relation exists, we expect that eventually the
-        # configuration for the OVN northbound connection will be performed an
+        # configuration for the OVN northbound connection will be performed and
         # signaled in the cluster data.
         if self.model.get_relation("ovsdb-cms"):
-            if "ovn" not in app_data.created_network:
+            if not app_data.ovn_nb_connection_ready:
                 logger.debug(
                     "OVN northbound connection is not configured on the cluster. app_data=%s",
                     app_data,
@@ -1252,7 +1364,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             return
         ovn_endpoints = cast(List[str], ovn_endpoints)
 
-        # If no certificate is issues, we're not ready
+        # If no certificate is issued, we're not ready
         certificate = self.tls_certificates.certificate
         if not certificate:
             logger.debug("No certificate available. Skipping OVN configuration.")
@@ -1282,28 +1394,109 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         ip = ip.strip('"')
         return f"ssl:{ip}:6641"
 
-    def _configure_ovn_connection(
-        self, event: ops.EventBase, connection_options: incus.OvnConnectionOptions
-    ):
-        """Configure the OVN connection in Incus.
+    def _configure_ovn_connection(self, connection_options: incus.OvnConnectionOptions) -> bool:
+        """Configure the OVN northbound connection in Incus.
 
-        If a retryable error occurs, `event` is deferred.
+        Returns whether the ovn connection options were successfully set on Incus.
         """
         try:
+            cluster_relation = self.model.get_relation("cluster")
+            assert cluster_relation, "Cluster peer relation does not exist."
             self.unit.status = ops.MaintenanceStatus("Configuring OVN northbound connection")
             logger.info("Configuring OVN northbound connection")
             incus.set_ovn_northbound_connection(connection_options)
+            cluster_relation.data[self.app]["ovn-nb-connection-ready"] = "true"
         except incus.IncusProcessError as error:
             if error.is_retryable:
-                logger.warning("Error is retryable. Will defer event. event=%s", event)
-                return event.defer()
-        else:
+                logger.warning("Error is retryable. error=%s", error)
+                return False
+            raise error
+        return True
+
+    def _create_ovn_network(self):
+        """Create an OVN network and its UPLINK."""
+        logger.info("Creating OVN network.")
+        self.unit.status = ops.MaintenanceStatus("Creating OVN network")
+
+        # If a physical uplink network is requested, ensure that we have a configured
+        # parent network interface.
+        if self.config.ovn_uplink_network_type == "physical":
+            assert self.config.ovn_uplink_network_parent_interface, (
+                "Uplink parent interface must be set on the config since the uplink network type is set to 'physical'"
+            )
+
+        if incus.is_clustered():
+            logger.info("Will create pending uplink network on all cluster nodes.")
             cluster_relation = self.model.get_relation("cluster")
             assert cluster_relation, "Cluster peer relation does not exist."
-            data = cast(ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app]))
-            created_network = data.created_network
-            created_network.add("ovn")
-            cluster_relation.data[self.app]["created-network"] = json.dumps(list(created_network))
+            for unit in [self.unit, *cluster_relation.units]:
+                try:
+                    data = cast(ClusterUnitData, ClusterUnitData.read(cluster_relation.data[unit]))
+                except ValidationError as error:
+                    logger.debug(
+                        "Could not validate unit data when creating uplink network. unit=%s error=%s",
+                        unit,
+                        error,
+                    )
+                    continue
+
+                node_name = data.node_name
+                if not data.joined_cluster_at:
+                    logger.info(
+                        "Unit has not yet joined the cluster. Skipping uplink network creation on node. node_name=%s",
+                        data.node_name,
+                    )
+                    continue
+
+                logger.info("Creating uplink network on Incus node. node_name=%s", node_name)
+
+                uplink_network_config = {}
+
+                # If a physical uplink network is requested, use the configured interface name
+                # as the uplink network parent.
+                if self.config.ovn_uplink_network_type == "physical":
+                    uplink_network_config["parent"] = (
+                        self.config.ovn_uplink_network_parent_interface
+                    )
+
+                incus.create_network(
+                    network_name="UPLINK",
+                    network_type=self.config.ovn_uplink_network_type,
+                    target=node_name,
+                    network_config=uplink_network_config,
+                )
+                logger.info("Uplink network created on node. node_name=%s", node_name)
+
+        logger.info("Instantiating uplink network across the cluster.")
+        incus.create_network(
+            network_name="UPLINK",
+            network_type=self.config.ovn_uplink_network_type,
+            network_config=self.config.ovn_uplink_network_config,
+        )
+        logger.info("Uplink network created.")
+        logger.info("Will create OVN network using the new uplink network.")
+        ovn_network_config: Dict[str, Optional[str]] = {}
+        if self.config.ovn_network_config:
+            if "network" in self.config.ovn_network_config:
+                logger.warning(
+                    "Ignoring 'network' key in ovn-network-config config option. This option is set automatically using the uplink network created by the charm"
+                )
+            ovn_network_config = self.config.ovn_network_config
+
+        ovn_network_config["network"] = "UPLINK"
+
+        incus.create_network(
+            network_name="ovn", network_type="ovn", network_config=ovn_network_config
+        )
+
+        cluster_relation = self.model.get_relation("cluster")
+        assert cluster_relation, "Cluster peer relation does not exist."
+        data = cast(ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app]))
+        created_network = data.created_network
+        created_network.add("ovn")
+        cluster_relation.data[self.app]["created-network"] = json.dumps(list(created_network))
+
+        logger.info("OVN network created.")
 
 
 if __name__ == "__main__":  # pragma: nocover

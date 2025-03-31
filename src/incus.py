@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 CLIFormats = Literal["csv", "json", "table", "yaml", "compact"]
 IncusStorageDriver = Literal["dir", "btrfs", "zfs", "ceph"]
-IncusNetworkDriver = Literal["ovn"]
+IncusNetworkType = Literal["ovn", "physical", "bridge"]
 IncusClientCertificateType = Literal["client", "metrics"]
 
 INCUS_VAR_DIR = Path("/var/lib/incus")
@@ -236,6 +236,27 @@ def configure_storage(pool_name: str, pool_config: Dict[str, str]):
     args = ["storage", "set", pool_name]
     for name, value in pool_config.items():
         args.append(f"{name}={value}")
+    run_command(*args)
+
+
+def create_network(
+    network_name: str,
+    network_type: IncusNetworkType,
+    target: Optional[str] = None,
+    network_config: Optional[Dict[str, Optional[str]]] = None,
+):
+    """Create a network in Incus.
+
+    Driver-specific parameters can be specified in `network_config`.
+    """
+    args = ["network", "create", network_name, "--type", network_type]
+    if network_config:
+        for name, value in network_config.items():
+            if value is not None:
+                args.append(f"{name}={value}")
+    if target:
+        args.extend(["--target", target])
+
     run_command(*args)
 
 

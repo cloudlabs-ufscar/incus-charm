@@ -3,7 +3,7 @@
 #
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import pytest
 import scenario
@@ -467,8 +467,8 @@ def test_certificates_relation_changed_certificate_old_stored():
         )
 
 
-def test_certificate_changed_ovn_leader():
-    """Test the certificate-changed event when the unit is the leader and has an ovsdb-cms relation.
+def test_certificate_changed_ovn_created_leader():
+    """Test the certificate-changed event when the unit is the leader, has an ovsdb-cms relation and the OVN network is already created.
 
     The certificate should be applied and the ovn client certificate should be updated.
     """
@@ -480,6 +480,7 @@ def test_certificate_changed_ovn_leader():
         patch("charm.incus.update_cluster_certificate") as update_cluster_certificate,
         patch("charm.incus.get_cluster_member_info"),
         patch("charm.incus.set_ovn_northbound_connection") as set_ovn_northbound_connection,
+        patch("charm.incus.create_network") as create_network,
     ):
         ctx = scenario.Context(IncusCharm)
         certificates_relation = scenario.Relation(
@@ -502,7 +503,7 @@ def test_certificate_changed_ovn_leader():
                 "tokens": "{}",
                 "cluster-certificate": "any-cluster-certificate",
                 "created-storage": "[]",
-                "created-network": "[]",
+                "created-network": '["ovn"]',
             },
         )
         ovsdb_cms_relation = scenario.Relation(
@@ -535,6 +536,100 @@ def test_certificate_changed_ovn_leader():
                 client_ca="any-ca",
                 northbound_connection="ssl:10.10.0.1:6641",
             )
+        )
+        create_network.assert_not_called()
+        assert cluster_relation.local_app_data.get("created-network") == '["ovn"]'
+
+
+def test_certificate_changed_ovn_not_created_leader():
+    """Test the certificate-changed event when the unit is the leader, has an ovsdb-cms relation and the OVN network is not created.
+
+    The certificate should be applied and the ovn client certificate should be updated. The unit
+    should also create a new OVN network and its uplink.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._restart_service") as restart_service,
+        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.update_server_certificate") as update_server_certificate,
+        patch("charm.incus.update_cluster_certificate") as update_cluster_certificate,
+        patch("charm.incus.get_cluster_member_info"),
+        patch("charm.incus.set_ovn_northbound_connection") as set_ovn_northbound_connection,
+        patch("charm.incus.create_network") as create_network,
+    ):
+        ctx = scenario.Context(IncusCharm)
+        certificates_relation = scenario.Relation(
+            endpoint="certificates",
+            interface="tls-certificates",
+            remote_units_data={
+                0: {
+                    "ca": "any-ca",
+                    "client.cert": "any-client-cert",
+                    "client.key": "any-client-key",
+                    "incus_0.server.cert": "any-server-cert",
+                    "incus_0.server.key": "any-server-key",
+                },
+            },
+        )
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            local_app_data={
+                "tokens": "{}",
+                "cluster-certificate": "any-cluster-certificate",
+                "created-storage": "[]",
+                "created-network": "[]",
+            },
+        )
+        ovsdb_cms_relation = scenario.Relation(
+            endpoint="ovsdb-cms",
+            interface="ovsdb-cms",
+            remote_units_data={0: {"bound-address": "10.10.0.1"}},
+        )
+        state = scenario.State(
+            leader=True,
+            relations={certificates_relation, cluster_relation, ovsdb_cms_relation},
+            config={
+                "ovn-uplink-network-config": "any-key=any-value another-key=another-value",
+                "ovn-uplink-network-type": "bridge",
+            },
+        )
+
+        ctx.run(ctx.on.relation_changed(relation=certificates_relation), state)
+
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+            scenario.MaintenanceStatus("Applying certificate"),
+            scenario.MaintenanceStatus("Configuring OVN northbound connection"),
+            scenario.MaintenanceStatus("Creating OVN network"),
+        ]
+        update_server_certificate.assert_called_once_with(
+            cert="any-server-cert", key="any-server-key", ca="any-ca"
+        )
+        restart_service.assert_not_called()
+        update_cluster_certificate.assert_called_once_with(
+            cert="any-server-cert", key="any-server-key"
+        )
+        set_ovn_northbound_connection.assert_called_once_with(
+            incus.OvnConnectionOptions(
+                client_cert="any-server-cert",
+                client_key="any-server-key",
+                client_ca="any-ca",
+                northbound_connection="ssl:10.10.0.1:6641",
+            )
+        )
+        create_network.assert_has_calls(
+            [
+                call(
+                    network_name="UPLINK",
+                    network_type="bridge",
+                    network_config={
+                        "any-key": "any-value",
+                        "another-key": "another-value",
+                    },
+                ),
+                call(network_name="ovn", network_type="ovn", network_config={"network": "UPLINK"}),
+            ]
         )
         assert cluster_relation.local_app_data.get("created-network") == '["ovn"]'
 

@@ -258,7 +258,7 @@ def test_ceph_relation_changed_not_clustered_storage_pool_created():
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
             scenario.MaintenanceStatus("Updating Ceph configuration files"),
-            scenario.MaintenanceStatus("Creating Ceph storage pool on Incus"),
+            scenario.MaintenanceStatus("Creating Ceph storage pool"),
         ]
         write_keyring_file.assert_called_once_with(ceph_user="any-app-name", key="any-ceph-key")
         write_ceph_conf_file.assert_called_once_with(
@@ -348,7 +348,7 @@ def test_ceph_relation_changed_leader_storage_pool_created():
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
             scenario.MaintenanceStatus("Updating Ceph configuration files"),
-            scenario.MaintenanceStatus("Creating Ceph storage pool on Incus"),
+            scenario.MaintenanceStatus("Creating Ceph storage pool"),
         ]
         write_keyring_file.assert_called_once_with(ceph_user="any-app-name", key="any-ceph-key")
         write_ceph_conf_file.assert_called_once_with(

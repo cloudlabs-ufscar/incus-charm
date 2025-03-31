@@ -400,6 +400,7 @@ def test_cluster_relation_changed_non_leader_not_clustered():
             "cluster_token": "any-join-token",
             "server_address": "10.0.0.2:8888",
             "cluster_certificate": "any-cluster-certificate",
+            "member_config": [],
         }
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
@@ -466,6 +467,7 @@ def test_cluster_relation_changed_non_leader_not_clustered_failure_domain():
             "cluster_token": "any-join-token",
             "server_address": "10.0.0.2:8888",
             "cluster_certificate": "any-cluster-certificate",
+            "member_config": [],
         }
         set_cluster_member_failure_domain.assert_called_once_with(
             "any-node-name", "any-availability-zone"
@@ -534,6 +536,7 @@ def test_cluster_relation_changed_non_leader_not_clustered_failure_domain_disabl
             "cluster_token": "any-join-token",
             "server_address": "10.0.0.2:8888",
             "cluster_certificate": "any-cluster-certificate",
+            "member_config": [],
         }
         set_cluster_member_failure_domain.assert_not_called()
         assert ctx.unit_status_history == [
@@ -830,6 +833,7 @@ def test_cluster_relation_changed_non_leader_ceph_pool_created():
             "cluster_token": "any-join-token",
             "server_address": "10.0.0.2:8888",
             "cluster_certificate": "any-cluster-certificate",
+            "member_config": [],
         }
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
@@ -917,7 +921,8 @@ def test_cluster_relation_changed_non_leader_ovn_ready():
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
                 "created-storage": "[]",
-                "created-network": '["ovn"]',
+                "created-network": "[]",
+                "ovn-nb-connection-ready": "true",
                 "cluster-certificate": "any-cluster-certificate",
             },
         )
@@ -946,9 +951,158 @@ def test_cluster_relation_changed_non_leader_ovn_ready():
             "cluster_token": "any-join-token",
             "server_address": "10.0.0.2:8888",
             "cluster_certificate": "any-cluster-certificate",
+            "member_config": [],
         }
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
             scenario.MaintenanceStatus("Bootstrapping Incus"),
         ]
         assert "joined-cluster-at" in relation.local_unit_data
+
+
+def test_cluster_relation_changed_non_leader_ovn_network_created_uplink_physical():
+    """Test the cluster-relation-changed event on non leader units when the OVN network is created and the uplink interface is configured to physical.
+
+    The unit should use the secret ID from the relation to retrieve the join token
+    from the secret. The token should then be used to bootstrap Incus and join the
+    cluster. Finally, the unit should also include the uplink network data on the
+    preseed data when bootstrapping the node.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._node_name", "any-node-name"),
+        patch("charm.incus.bootstrap_node") as bootstrap_node,
+        patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.ceph.is_configured", return_value=True),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            peers_data={
+                0: {"node-name": "leader-node-name"},
+                1: {"node-name": "any-node-name"},
+            },
+            local_app_data={
+                "tokens": '{"any-node-name": "any-join-token-secret-id"}',
+                "created-storage": "[]",
+                "created-network": '["ovn"]',
+                "ovn-nb-connection-ready": "true",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        state = scenario.State(
+            leader=False,
+            relations={relation, scenario.Relation(endpoint="ovsdb-cms")},
+            networks=[
+                scenario.Network(
+                    binding_name="cluster",
+                    bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
+                ),
+            ],
+            config={
+                "cluster-port": 8888,
+                "ovn-uplink-network-type": "physical",
+                "ovn-uplink-network-parent-interface": "any-uplink-interface",
+            },
+            secrets={
+                scenario.Secret(
+                    id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
+                )
+            },
+        )
+
+        ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+
+        bootstrap_node.assert_called_once()
+        bootstrap_data = bootstrap_node.call_args.args[0]
+        assert bootstrap_data == {
+            "cluster": {
+                "enabled": True,
+                "cluster_token": "any-join-token",
+                "server_address": "10.0.0.2:8888",
+                "cluster_certificate": "any-cluster-certificate",
+                "member_config": [
+                    {
+                        "entity": "network",
+                        "name": "UPLINK",
+                        "key": "parent",
+                        "value": "any-uplink-interface",
+                    }
+                ],
+            }
+        }
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+            scenario.MaintenanceStatus("Bootstrapping Incus"),
+        ]
+        assert "joined-cluster-at" in relation.local_unit_data
+
+
+def test_cluster_relation_changed_non_leader_ovn_network_created_uplink_bridge():
+    """Test the cluster-relation-changed event on non leader units when the OVN network is created and the uplink interface is configured to a bridge.
+
+    The unit should use the secret ID from the relation to retrieve the join token
+    from the secret. The token should then be used to bootstrap Incus and join the
+    cluster. Finally, the unit should also include the uplink network data on the
+    preseed data when bootstrapping the node.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._node_name", "any-node-name"),
+        patch("charm.incus.bootstrap_node") as bootstrap_node,
+        patch("charm.incus.is_clustered", return_value=False),
+        patch("charm.ceph.is_configured", return_value=True),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            peers_data={
+                0: {"node-name": "leader-node-name"},
+                1: {"node-name": "any-node-name"},
+            },
+            local_app_data={
+                "tokens": '{"any-node-name": "any-join-token-secret-id"}',
+                "created-storage": "[]",
+                "created-network": '["ovn"]',
+                "ovn-nb-connection-ready": "true",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        state = scenario.State(
+            leader=False,
+            relations={relation, scenario.Relation(endpoint="ovsdb-cms")},
+            networks=[
+                scenario.Network(
+                    binding_name="cluster",
+                    bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
+                ),
+            ],
+            config={"cluster-port": 8888, "ovn-uplink-network-type": "bridge"},
+            secrets={
+                scenario.Secret(
+                    id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
+                )
+            },
+        )
+
+        ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+
+        bootstrap_node.assert_called_once()
+        bootstrap_data = bootstrap_node.call_args.args[0]
+        assert bootstrap_data == {
+            "cluster": {
+                "enabled": True,
+                "cluster_token": "any-join-token",
+                "server_address": "10.0.0.2:8888",
+                "cluster_certificate": "any-cluster-certificate",
+                "member_config": [],
+            }
+        }
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+            scenario.MaintenanceStatus("Bootstrapping Incus"),
+        ]
+        assert "joined-cluster-at" in relation.local_unit_data
+        assert "ovn-uplink-interface" not in relation.local_unit_data
