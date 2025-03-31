@@ -15,6 +15,9 @@ applications:
       "": alpha
     options:
       ceph-rbd-features: layering,deep-flatten
+      ovn-uplink-network-type: bridge
+      ovn-uplink-network-config: ipv4.address=10.179.176.1/24 ipv4.nat=true ipv4.dhcp=false ipv4.ovn.ranges=10.179.176.2-10.179.176.254
+      ovn-network-config: ipv4.nat=true
   vault:
     charm: vault
     channel: 1.8/stable

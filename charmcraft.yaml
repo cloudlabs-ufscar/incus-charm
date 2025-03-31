@@ -175,6 +175,40 @@ config:
         For more information, refer to the Incus documentation:
         https://linuxcontainers.org/incus/docs/main/server_config/#openfga-configuration
       type: string
+    ovn-uplink-network-type:
+      description: |
+        The type of network that will be used to create the OVN uplink network.
+
+        Valid values are: "physical" and "bridge".
+      default: bridge
+      type: string
+    ovn-uplink-network-config:
+      description: |
+        A space separated list of key value pairs in the form key=value to be set on the uplink
+        network that will be consumed by OVN networks.
+
+        The accepted values by Incus will vary based on the value of `ovn-uplink-network-type`. For
+        more information about supported values, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/reference/network_bridge
+        https://linuxcontainers.org/incus/docs/main/reference/network_physical
+      type: string
+    ovn-uplink-network-parent-interface:
+      description: |
+        The name of the network interface that should be used as the parent network for the OVN
+        uplink network. The interface name should be consistent across all units of the application.
+
+        This option only has effect if `ovn-uplink-network-type` is set to `physical`.
+      default: bridge
+      type: string
+    ovn-network-config:
+      description: |
+        A space separated list of key value pairs in the form key=value to be set on the OVN network.
+        Note that setting the `network` config option in this list has no effect, as the charm will
+        automatically set this option to match the created uplink network.
+
+        For more information about supported values, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/reference/network_ovn/
+      type: string
 
 actions:
   add-trusted-certificate:
