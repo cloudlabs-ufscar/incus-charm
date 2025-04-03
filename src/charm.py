@@ -201,7 +201,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         )
         framework.observe(self.on.ceph_relation_created, self.on_ceph_relation_created)
         framework.observe(self.on.ceph_relation_changed, self.on_ceph_relation_changed)
-        framework.observe(self.on.ovsdb_cms_relation_created, self.on_ovsdb_cms_relation_created)
+        framework.observe(self.on.ovsdb_cms_relation_joined, self.on_ovsdb_cms_relation_joined)
         framework.observe(self.on.ovsdb_cms_relation_changed, self.on_ovsdb_cms_relation_changed)
 
         # Actions
@@ -768,8 +768,8 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         )
         logger.info("Ceph storage pool created.")
 
-    def on_ovsdb_cms_relation_created(self, event: ops.RelationCreatedEvent):
-        """Handle ovsdb-cms-relation-created event.
+    def on_ovsdb_cms_relation_joined(self, event: ops.RelationCreatedEvent):
+        """Handle ovsdb-cms-relation-joined event.
 
         Sets the unit's IP address on the relation data for ovn-central to
         create firewall rules allowing access to the ovn northbound database.

@@ -9,8 +9,8 @@ from charm import IncusCharm
 
 
 @pytest.mark.parametrize("address", ["192.168.0.2", "10.0.2.84", "38.28.79.12"])
-def test_ovsdb_cms_relation_created(address: str):
-    """Test the ovsdb-cms-relation-created event.
+def test_ovsdb_cms_relation_joined(address: str):
+    """Test the ovsdb-cms-relation-joined event.
 
     The unit should put the IP address for the binding associated with the
     relation in the relation data.
@@ -40,7 +40,7 @@ def test_ovsdb_cms_relation_created(address: str):
             leader=True, relations={ovsdb_cms_relation, cluster_relation}, networks={network}
         )
 
-        ctx.run(ctx.on.relation_created(relation=ovsdb_cms_relation), state)
+        ctx.run(ctx.on.relation_joined(relation=ovsdb_cms_relation), state)
 
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
