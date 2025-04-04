@@ -392,7 +392,7 @@ def test_cluster_relation_changed_non_leader_not_clustered():
             },
         )
 
-        ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+        out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
 
         bootstrap_node.assert_called_once()
         assert bootstrap_node.call_args.args[0]["cluster"] == {
@@ -406,6 +406,7 @@ def test_cluster_relation_changed_non_leader_not_clustered():
             scenario.UnknownStatus(),
             scenario.MaintenanceStatus("Bootstrapping Incus"),
         ]
+        relation = out.get_relation(relation.id)
         assert "joined-cluster-at" in relation.local_unit_data
 
 
@@ -459,7 +460,7 @@ def test_cluster_relation_changed_non_leader_not_clustered_failure_domain():
             },
         )
 
-        ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+        out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
 
         bootstrap_node.assert_called_once()
         assert bootstrap_node.call_args.args[0]["cluster"] == {
@@ -476,6 +477,7 @@ def test_cluster_relation_changed_non_leader_not_clustered_failure_domain():
             scenario.UnknownStatus(),
             scenario.MaintenanceStatus("Bootstrapping Incus"),
         ]
+        relation = out.get_relation(relation.id)
         assert "joined-cluster-at" in relation.local_unit_data
 
 
@@ -528,7 +530,7 @@ def test_cluster_relation_changed_non_leader_not_clustered_failure_domain_disabl
             },
         )
 
-        ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+        out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
 
         bootstrap_node.assert_called_once()
         assert bootstrap_node.call_args.args[0]["cluster"] == {
@@ -543,6 +545,7 @@ def test_cluster_relation_changed_non_leader_not_clustered_failure_domain_disabl
             scenario.UnknownStatus(),
             scenario.MaintenanceStatus("Bootstrapping Incus"),
         ]
+        relation = out.get_relation(relation.id)
         assert "joined-cluster-at" in relation.local_unit_data
 
 
@@ -825,7 +828,7 @@ def test_cluster_relation_changed_non_leader_ceph_pool_created():
             },
         )
 
-        ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+        out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
 
         bootstrap_node.assert_called_once()
         assert bootstrap_node.call_args.args[0]["cluster"] == {
@@ -839,6 +842,7 @@ def test_cluster_relation_changed_non_leader_ceph_pool_created():
             scenario.UnknownStatus(),
             scenario.MaintenanceStatus("Bootstrapping Incus"),
         ]
+        relation = out.get_relation(relation.id)
         assert "joined-cluster-at" in relation.local_unit_data
 
 
@@ -943,7 +947,7 @@ def test_cluster_relation_changed_non_leader_ovn_ready():
             },
         )
 
-        ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+        out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
 
         bootstrap_node.assert_called_once()
         assert bootstrap_node.call_args.args[0]["cluster"] == {
@@ -957,6 +961,7 @@ def test_cluster_relation_changed_non_leader_ovn_ready():
             scenario.UnknownStatus(),
             scenario.MaintenanceStatus("Bootstrapping Incus"),
         ]
+        relation = out.get_relation(relation.id)
         assert "joined-cluster-at" in relation.local_unit_data
 
 
@@ -1012,7 +1017,7 @@ def test_cluster_relation_changed_non_leader_ovn_network_created_uplink_physical
             },
         )
 
-        ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+        out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
 
         bootstrap_node.assert_called_once()
         bootstrap_data = bootstrap_node.call_args.args[0]
@@ -1036,6 +1041,7 @@ def test_cluster_relation_changed_non_leader_ovn_network_created_uplink_physical
             scenario.UnknownStatus(),
             scenario.MaintenanceStatus("Bootstrapping Incus"),
         ]
+        relation = out.get_relation(relation.id)
         assert "joined-cluster-at" in relation.local_unit_data
 
 
@@ -1087,7 +1093,7 @@ def test_cluster_relation_changed_non_leader_ovn_network_created_uplink_bridge()
             },
         )
 
-        ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
+        out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
 
         bootstrap_node.assert_called_once()
         bootstrap_data = bootstrap_node.call_args.args[0]
@@ -1104,5 +1110,6 @@ def test_cluster_relation_changed_non_leader_ovn_network_created_uplink_bridge()
             scenario.UnknownStatus(),
             scenario.MaintenanceStatus("Bootstrapping Incus"),
         ]
+        relation = out.get_relation(relation.id)
         assert "joined-cluster-at" in relation.local_unit_data
         assert "ovn-uplink-interface" not in relation.local_unit_data

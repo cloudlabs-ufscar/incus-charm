@@ -595,7 +595,7 @@ def test_certificate_changed_ovn_not_created_leader():
             },
         )
 
-        ctx.run(ctx.on.relation_changed(relation=certificates_relation), state)
+        out = ctx.run(ctx.on.relation_changed(relation=certificates_relation), state)
 
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
@@ -631,6 +631,7 @@ def test_certificate_changed_ovn_not_created_leader():
                 call(network_name="ovn", network_type="ovn", network_config={"network": "UPLINK"}),
             ]
         )
+        cluster_relation = out.get_relation(cluster_relation.id)
         assert cluster_relation.local_app_data.get("created-network") == '["ovn"]'
 
 

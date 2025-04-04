@@ -40,11 +40,13 @@ def test_ovsdb_cms_relation_joined(address: str):
             leader=True, relations={ovsdb_cms_relation, cluster_relation}, networks={network}
         )
 
-        ctx.run(ctx.on.relation_joined(relation=ovsdb_cms_relation), state)
+        out = ctx.run(ctx.on.relation_joined(relation=ovsdb_cms_relation), state)
 
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
         ]
+
+        ovsdb_cms_relation = out.get_relation(ovsdb_cms_relation.id)
         assert ovsdb_cms_relation.local_unit_data.get("cms-client-bound-address") == address
 
 
@@ -143,7 +145,7 @@ def test_ovsdb_cms_relation_changed_leader(addresses: List[str], expected_connec
             },
         )
 
-        ctx.run(ctx.on.relation_changed(relation=ovsdb_cms_relation), state)
+        out = ctx.run(ctx.on.relation_changed(relation=ovsdb_cms_relation), state)
 
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
@@ -159,6 +161,7 @@ def test_ovsdb_cms_relation_changed_leader(addresses: List[str], expected_connec
             )
         )
 
+        cluster_relation = out.get_relation(cluster_relation.id)
         assert cluster_relation.local_app_data.get("ovn-nb-connection-ready") == "true"
         assert cluster_relation.local_app_data.get("created-network") == '["ovn"]'
 
@@ -336,7 +339,7 @@ def test_ovsdb_cms_relation_changed_leader_bridge_uplink():
             },
         )
 
-        ctx.run(ctx.on.relation_changed(relation=ovsdb_cms_relation), state)
+        out = ctx.run(ctx.on.relation_changed(relation=ovsdb_cms_relation), state)
 
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
@@ -385,6 +388,7 @@ def test_ovsdb_cms_relation_changed_leader_bridge_uplink():
             ]
         )
 
+        cluster_relation = out.get_relation(cluster_relation.id)
         assert cluster_relation.local_app_data.get("ovn-nb-connection-ready") == "true"
         assert cluster_relation.local_app_data.get("created-network") == '["ovn"]'
 
@@ -458,7 +462,7 @@ def test_ovsdb_cms_relation_changed_leader_physical_uplink():
             },
         )
 
-        ctx.run(ctx.on.relation_changed(relation=ovsdb_cms_relation), state)
+        out = ctx.run(ctx.on.relation_changed(relation=ovsdb_cms_relation), state)
 
         assert ctx.unit_status_history == [
             scenario.UnknownStatus(),
@@ -507,5 +511,6 @@ def test_ovsdb_cms_relation_changed_leader_physical_uplink():
             ]
         )
 
+        cluster_relation = out.get_relation(cluster_relation.id)
         assert cluster_relation.local_app_data.get("ovn-nb-connection-ready") == "true"
         assert cluster_relation.local_app_data.get("created-network") == '["ovn"]'
