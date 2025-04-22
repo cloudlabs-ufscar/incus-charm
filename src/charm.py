@@ -83,6 +83,10 @@ class IncusConfig(data_models.BaseConfigModel):
     ovn_network_config: Optional[Dict[str, Optional[str]]] = None
     enable_bgp: bool
     bgp_asn: Optional[int] = None
+    create_local_storage_pool: bool
+    local_storage_pool_driver: incus.IncusLocalStorageDriver
+    local_storage_pool_device: Optional[str] = None
+    local_storage_pool_config: Optional[Dict[str, Optional[str]]] = None
 
     @validator("server_port", "cluster_port", "metrics_port")
     @classmethod
@@ -93,7 +97,9 @@ class IncusConfig(data_models.BaseConfigModel):
             raise ValueError("A port value should be an integer between 0 and 65535")
         return port
 
-    @validator("ovn_uplink_network_config", "ovn_network_config", pre=True)
+    @validator(
+        "ovn_uplink_network_config", "ovn_network_config", "local_storage_pool_config", pre=True
+    )
     @classmethod
     def parse_key_pairs(cls, value):
         """Parse a space separated string of key-value pairs (e.g. `"key1=value key2=another-value"`) into a dictionary."""
@@ -108,6 +114,18 @@ class IncusConfig(data_models.BaseConfigModel):
                 parsed[key] = value
 
             return parsed
+
+        return value
+
+    @validator("local_storage_pool_device", pre=True)
+    @classmethod
+    def parse_device_name(cls, value):
+        """Parse a device name, adding the '/dev' prefix if needed."""
+        if isinstance(value, str):
+            prefix = "/dev/"
+            if value.startswith(prefix):
+                return value
+            return prefix + value
 
         return value
 
@@ -174,6 +192,11 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
     service_name = "incus"
     ceph_package_name = "ceph-common"
     web_ui_package_name = "incus-ui-canonical"
+    local_storage_packages: Dict[incus.IncusLocalStorageDriver, str] = {
+        "zfs": "zfsutils-linux",
+        "btrfs": "btrfs-progs",
+        "lvm": "lvm2",
+    }
 
     config_type = IncusConfig
 
@@ -288,6 +311,12 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         packages = [self.package_name]
         if self.model.get_relation("ceph"):
             packages.append(self.ceph_package_name)
+
+        local_storage_packages = self.local_storage_packages.get(
+            self.config.local_storage_pool_driver
+        )
+        if local_storage_packages and self.config.create_local_storage_pool:
+            packages.append(local_storage_packages)
 
         if self.config.enable_web_ui:
             packages.append(self.web_ui_package_name)
@@ -1157,8 +1186,8 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
     ) -> Dict:
         if not join_token:
             logger.info("Join token not provided. Will bootstrap a new cluster")
-            return {
-                # TODO: make the creation of networks configurable
+            # TODO: make the creation of networks configurable
+            preseed = {
                 "networks": [
                     {
                         "name": "incusbr0",
@@ -1169,15 +1198,6 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                             "ipv4.address": "auto",
                             "ipv6.address": "auto",
                         },
-                    },
-                ],
-                # TODO: make the creation of storage pools configurable
-                "storage_pools": [
-                    {
-                        "name": "default",
-                        "description": "Default storage pool",
-                        "driver": "btrfs",
-                        "config": {"size": "5GiB"},
                     },
                 ],
                 "profiles": [
@@ -1191,16 +1211,42 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                                 "network": "incusbr0",
                                 "type": "nic",
                             },
-                            "root": {
-                                "path": "/",
-                                "pool": "default",
-                                "type": "disk",
-                            },
                         },
                     },
                 ],
                 "projects": [],
             }
+            if self.config.create_local_storage_pool:
+                logger.info("Adding local storage pool 'default' and root device to preseed data.")
+                config = self.config.local_storage_pool_config or {}
+                if self.config.local_storage_pool_device:
+                    config["source"] = self.config.local_storage_pool_device
+
+                preseed["storage_pools"] = [
+                    {
+                        "name": "default",
+                        "description": "Default storage pool",
+                        "driver": self.config.local_storage_pool_driver,
+                        "config": config,
+                    },
+                ]
+                # Add the root device to the 'default' profile's devices dictionary
+                if preseed["profiles"]:
+                    preseed["profiles"][0]["devices"]["root"] = {
+                        "path": "/",
+                        "pool": "default",
+                        "type": "disk",
+                    }
+                else:
+                    logger.warning("Cannot add root device: 'profiles' list is empty.")
+
+            else:
+                logger.info(
+                    "Skipping local storage pool creation in preseed data. create_local_storage_pool=%s",
+                    self.config.create_local_storage_pool,
+                )
+
+            return preseed
 
         logger.info("Join token provided. Will join an existing cluster")
         preseed = {
@@ -1209,18 +1255,20 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 "cluster_token": join_token,
                 "cluster_certificate": cluster_certificate,
                 "server_address": self._cluster_address,
-                "member_config": [
-                    # {
-                    #     "entity": "storage-pool",
-                    #     "name": "default",
-                    # },
-                    # {
-                    #     "entity": "network",
-                    #     "name": "incusbr0",
-                    # },
-                ],
+                "member_config": [],
             }
         }
+
+        # If a local storage pool was requested, add the config on the preseed data
+        if self.config.create_local_storage_pool:
+            preseed["cluster"]["member_config"].append(
+                {
+                    "entity": "storage-pool",
+                    "name": "default",
+                    "key": "source",
+                    "value": self.config.local_storage_pool_device,
+                }
+            )
 
         cluster_relation = self.model.get_relation("cluster")
         assert cluster_relation, "Cluster peer relation does not exist."

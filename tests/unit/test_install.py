@@ -29,7 +29,7 @@ def test_install(leader, is_clustered):
         patch("charm.incus.get_cluster_member_info"),
     ):
         ctx = scenario.Context(IncusCharm)
-        state = scenario.State(leader=leader)
+        state = scenario.State(leader=leader, config={"create-local-storage-pool": False})
 
         out = ctx.run(ctx.on.install(), state)
 
@@ -61,6 +61,7 @@ def test_install_with_ceph_relation(leader, is_clustered):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(
             leader=leader,
+            config={"create-local-storage-pool": False},
             relations=[
                 scenario.Relation(endpoint="ceph", interface="ceph-client"),
                 scenario.PeerRelation(endpoint="cluster"),
@@ -97,7 +98,7 @@ def test_install_with_web_ui_enabled(leader, is_clustered):
         ctx = scenario.Context(IncusCharm)
         state = scenario.State(
             leader=leader,
-            config={"enable-web-ui": True},
+            config={"enable-web-ui": True, "create-local-storage-pool": False},
             relations=[
                 scenario.PeerRelation(endpoint="cluster"),
             ],
@@ -111,6 +112,52 @@ def test_install_with_web_ui_enabled(leader, is_clustered):
             gpg_key_url="https://pkgs.zabbly.com/key.asc",
         )
         install_packages.assert_called_once_with("incus", "incus-ui-canonical")
+
+
+@pytest.mark.parametrize(
+    "leader,is_clustered", [(False, False), (True, False), (False, True), (True, True)]
+)
+@pytest.mark.parametrize(
+    "storage_driver,expected_package",
+    [("dir", None), ("zfs", "zfsutils-linux"), ("btrfs", "btrfs-progs"), ("lvm", "lvm2")],
+)
+def test_install_with_local_storage(leader, is_clustered, storage_driver, expected_package):
+    """Test the install event when a ceph relation is already established.
+
+    The unit should add the APT repository and install both the incus and
+    the storage driver packages.
+    """
+    with (
+        patch("charm.IncusCharm._add_apt_repository") as add_apt_repository,
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._install_packages") as install_packages,
+        patch("charm.IncusCharm._package_version", "any-version"),
+        patch("charm.incus.is_clustered", return_value=is_clustered),
+        patch("charm.incus.get_cluster_member_info"),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            leader=leader,
+            config={
+                "create-local-storage-pool": True,
+                "local-storage-pool-driver": storage_driver,
+            },
+            relations=[
+                scenario.PeerRelation(endpoint="cluster"),
+            ],
+        )
+
+        out = ctx.run(ctx.on.install(), state)
+
+        assert out.workload_version == "any-version"
+        add_apt_repository.assert_called_once_with(
+            repository_line="deb https://pkgs.zabbly.com/incus/stable jammy main",
+            gpg_key_url="https://pkgs.zabbly.com/key.asc",
+        )
+        if expected_package:
+            install_packages.assert_called_once_with("incus", expected_package)
+        else:
+            install_packages.assert_called_once_with("incus")
 
 
 def test_install_repository_config():
@@ -132,6 +179,7 @@ def test_install_repository_config():
             config={
                 "package-repository": "any-package-repository",
                 "package-repository-gpg-key": "any-package-repository-gpg-key",
+                "create-local-storage-pool": False,
             },
         )
 

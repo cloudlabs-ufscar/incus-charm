@@ -224,6 +224,37 @@ config:
         For more information about BGP support, refer to the Incus documentation:
         https://linuxcontainers.org/incus/docs/main/howto/network_bgp
       type: int
+    create-local-storage-pool:
+      description: |
+        Whether to create a local storage pool.
+      type: boolean
+      default: true
+    local-storage-pool-driver:
+      description: |
+        The storage driver to use for the local storage pool.
+
+        Acceptable values are: "dir", "btrfs", "zfs" and "lvm".
+      type: string
+      default: zfs
+    local-storage-pool-config:
+      description: |
+        A space separated list of key value pairs in the form key=value to be set on the local storage
+        pool. Note that setting the `source` config option in this list has no effect, as the charm will
+        automatically set this option to match the device specified in `local-storage-pool-device`.
+
+        For more information about supported values, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/reference/storage_drivers/
+      type: string
+    local-storage-pool-device:
+      description: |
+        The block device in which to create the local storage pool.
+
+        Can be either device name such as "sdx" or the full path to
+        the device such as "/dev/sdx".
+
+        When this option is not specified, a loop device or directory on the root disk will be created for
+        the storage pool, depending on the driver specified by `local-storage-pool-driver`.
+      type: string
 
 actions:
   add-trusted-certificate:
