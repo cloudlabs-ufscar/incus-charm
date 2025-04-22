@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 CLIFormats = Literal["csv", "json", "table", "yaml", "compact"]
-IncusStorageDriver = Literal["dir", "btrfs", "zfs", "ceph"]
+IncusLocalStorageDriver = Literal["dir", "btrfs", "zfs", "lvm"]
+IncusStorageDriver = Union[IncusLocalStorageDriver, Literal["ceph"]]
 IncusNetworkType = Literal["ovn", "physical", "bridge"]
 IncusClientCertificateType = Literal["client", "metrics"]
 

@@ -182,7 +182,9 @@ def test_cluster_relation_changed_leader_not_clustered_set_failure_domain():
             },
         )
         state = scenario.State(
-            leader=True, relations={relation}, config={"set-failure-domain": True}
+            leader=True,
+            relations={relation},
+            config={"set-failure-domain": True, "create-local-storage-pool": False},
         )
 
         out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
@@ -235,7 +237,9 @@ def test_cluster_relation_changed_leader_not_clustered_set_failure_domain_disabl
             },
         )
         state = scenario.State(
-            leader=True, relations={relation}, config={"set-failure-domain": False}
+            leader=True,
+            relations={relation},
+            config={"set-failure-domain": False, "create-local-storage-pool": False},
         )
 
         out = ctx.run(ctx.on.relation_changed(relation=relation, remote_unit=1), state)
@@ -384,7 +388,7 @@ def test_cluster_relation_changed_non_leader_not_clustered():
                     bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
                 )
             ],
-            config={"cluster-port": 8888},
+            config={"cluster-port": 8888, "create-local-storage-pool": False},
             secrets={
                 scenario.Secret(
                     id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
@@ -452,7 +456,11 @@ def test_cluster_relation_changed_non_leader_not_clustered_failure_domain():
                     bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
                 )
             ],
-            config={"cluster-port": 8888, "set-failure-domain": True},
+            config={
+                "cluster-port": 8888,
+                "set-failure-domain": True,
+                "create-local-storage-pool": False,
+            },
             secrets={
                 scenario.Secret(
                     id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
@@ -522,7 +530,11 @@ def test_cluster_relation_changed_non_leader_not_clustered_failure_domain_disabl
                     bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
                 )
             ],
-            config={"cluster-port": 8888, "set-failure-domain": False},
+            config={
+                "cluster-port": 8888,
+                "set-failure-domain": False,
+                "create-local-storage-pool": False,
+            },
             secrets={
                 scenario.Secret(
                     id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
@@ -820,7 +832,7 @@ def test_cluster_relation_changed_non_leader_ceph_pool_created():
                     bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
                 )
             ],
-            config={"cluster-port": 8888},
+            config={"cluster-port": 8888, "create-local-storage-pool": False},
             secrets={
                 scenario.Secret(
                     id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
@@ -939,7 +951,7 @@ def test_cluster_relation_changed_non_leader_ovn_ready():
                     bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
                 )
             ],
-            config={"cluster-port": 8888},
+            config={"cluster-port": 8888, "create-local-storage-pool": False},
             secrets={
                 scenario.Secret(
                     id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}
@@ -1009,6 +1021,7 @@ def test_cluster_relation_changed_non_leader_ovn_network_created_uplink_physical
                 "cluster-port": 8888,
                 "ovn-uplink-network-type": "physical",
                 "ovn-uplink-network-parent-interface": "any-uplink-interface",
+                "create-local-storage-pool": False,
             },
             secrets={
                 scenario.Secret(
@@ -1085,7 +1098,11 @@ def test_cluster_relation_changed_non_leader_ovn_network_created_uplink_bridge()
                     bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.2")])],
                 ),
             ],
-            config={"cluster-port": 8888, "ovn-uplink-network-type": "bridge"},
+            config={
+                "cluster-port": 8888,
+                "ovn-uplink-network-type": "bridge",
+                "create-local-storage-pool": False,
+            },
             secrets={
                 scenario.Secret(
                     id="any-join-token-secret-id", tracked_content={"token": "any-join-token"}

@@ -156,7 +156,7 @@ async def test_cluster_state(ops_test: OpsTest):
 async def test_storage_pools(ops_test: OpsTest, ceph_rbd_features: str = "layering,deep-flatten"):
     """Test the configured storage pools.
 
-    All units should have a local Btrfs and a Ceph storage pool.
+    All units should have a local LVM and a Ceph storage pool.
     """
     assert ops_test.model, "No model found"
 
