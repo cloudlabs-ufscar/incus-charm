@@ -11,6 +11,10 @@ applications:
       - 0
     bindings:
       "": alpha
+    options:
+      create-local-storage-pool: true
+      local-storage-pool-driver: zfs
+      local-storage-pool-config: volume.zfs.remove_snapshots=true zfs.pool_name=any-pool-name size=1GiB
   vault:
     charm: vault
     channel: 1.8/stable

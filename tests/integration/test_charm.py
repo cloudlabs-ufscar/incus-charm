@@ -114,6 +114,39 @@ async def test_workload_connectivity(ops_test: OpsTest, tmp_path: Path):
 
 
 @pytest.mark.abort_on_fail
+async def test_storage_pools(ops_test: OpsTest):
+    """Test the configured storage pools.
+
+    The unit should have a local ZFS storage pool.
+    """
+    assert ops_test.model, "No model found"
+
+    application = ops_test.model.applications[APP_NAME]
+    assert application, "Application not found in model"
+    unit = application.units[0]
+
+    # HACK: Incus's first command always outputs a help message that breaks
+    # output parsing. To bypass this, we always run a dummy command first.
+    await ops_test.juju(*f"exec --unit {unit.name} -- incus info".split())
+    result_code, stdout, stderr = await ops_test.juju(
+        *f"exec --unit {unit.name} -- incus query /1.0/storage-pools?recursion=1".split()
+    )
+
+    assert result_code == 0, stderr
+    assert stderr == ""
+    assert stdout
+
+    storage_pools = json.loads(stdout)
+    assert len(storage_pools) == 1
+    storage_pool = storage_pools[0]
+    assert storage_pool["driver"] == "zfs"
+    assert storage_pool["name"] == "default"
+    assert storage_pool["status"] == "Created"
+    assert storage_pool["config"]["zfs.pool_name"] == "any-pool-name"
+    assert storage_pool["config"]["volume.zfs.remove_snapshots"] == "true"
+
+
+@pytest.mark.abort_on_fail
 @pytest.mark.parametrize("port", (8888, 8443))
 async def test_change_port(ops_test: OpsTest, port: int):
     """Test changing the server port via a config option.
