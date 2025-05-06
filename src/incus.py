@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Dict, List, Literal, Optional, Union
+from typing import Dict, List, Literal, Mapping, Optional, Union
 
 import yaml
 from pydantic import BaseModel
@@ -72,7 +72,7 @@ class IncusProcessError(Exception):
         return any(message in self.message for message in self.retryable_error_messages)
 
 
-def set_config(configs: Dict[str, Optional[Union[str, int]]]):
+def set_config(configs: Mapping[str, Optional[Union[str, int]]]):
     """Set the given configs in the Incus daemon.
 
     If any config value is `None`, the config will be unset in Incus.
@@ -244,7 +244,7 @@ def create_network(
     network_name: str,
     network_type: IncusNetworkType,
     target: Optional[str] = None,
-    network_config: Optional[Dict[str, Optional[str]]] = None,
+    network_config: Optional[Mapping[str, Optional[str]]] = None,
 ):
     """Create a network in Incus.
 

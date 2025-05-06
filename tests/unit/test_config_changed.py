@@ -762,3 +762,50 @@ def test_config_changed_bgp_disabled():
             not in set_config.calls
         )
         assert scenario.TCPPort(179) not in out.opened_ports
+
+
+def test_config_changed_extra_configs():
+    """Test the config-changed event when extra config options are set.
+
+    The unit should set the config options in Incus.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", return_value=False),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
+        patch("charm.incus.set_config") as set_config,
+        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.get_cluster_member_info"),
+    ):
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            local_app_data={
+                "tokens": "{}",
+                "created-storage": "[]",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            leader=True,
+            relations={cluster_relation},
+            config={"extra-config": "any-key=any-value another-key=another-value"},
+        )
+
+        ctx.run(ctx.on.config_changed(), state)
+
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+            scenario.MaintenanceStatus("Changing config"),
+        ]
+
+        set_config.assert_has_calls(
+            [
+                call(
+                    {
+                        "any-key": "any-value",
+                        "another-key": "another-value",
+                    }
+                )
+            ]
+        )
