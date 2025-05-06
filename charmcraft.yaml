@@ -209,6 +209,21 @@ config:
         For more information about supported values, refer to the Incus documentation:
         https://linuxcontainers.org/incus/docs/main/reference/network_ovn/
       type: string
+    enable-bgp:
+      description: |
+        Whether to enable the Incus BGP server.
+
+        For more information about BGP support, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/howto/network_bgp
+      default: false
+      type: boolean
+    bgp-asn:
+      description: |
+        The BGP ASN (Autonomous System Number) for the BGP server.
+
+        For more information about BGP support, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/howto/network_bgp
+      type: int
 
 actions:
   add-trusted-certificate:
@@ -273,6 +288,7 @@ actions:
 extra-bindings:
   public:
   monitoring:
+  bgp:
 
 peers:
   cluster:

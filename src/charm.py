@@ -81,6 +81,8 @@ class IncusConfig(data_models.BaseConfigModel):
     ovn_uplink_network_parent_interface: Optional[str] = None
     ovn_uplink_network_config: Optional[Dict[str, Optional[str]]] = None
     ovn_network_config: Optional[Dict[str, Optional[str]]] = None
+    enable_bgp: bool
+    bgp_asn: Optional[int] = None
 
     @validator("server_port", "cluster_port", "metrics_port")
     @classmethod
@@ -319,7 +321,27 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             metrics_address = str(monitoring_binding.network.bind_address)
         if metrics_address != public_address:
             incus.set_config({"core.metrics_address": f"{metrics_address}:{metrics_port}"})
-        self.unit.set_ports(ops.Port("tcp", metrics_port), ops.Port("tcp", server_port))
+        ports = [ops.Port("tcp", metrics_port), ops.Port("tcp", server_port)]
+
+        if self.config.enable_bgp:
+            bgp_port = 179
+            bgp_address = f"{self._bgp_address}:{179}"
+            logger.info(
+                "Enabling BGP server. bgp_address=%s bgp_asn=%s bgp_routerid=%s",
+                bgp_address,
+                self.config.bgp_asn,
+                self._bgp_address,
+            )
+            incus.set_config(
+                {
+                    "core.bgp_address": bgp_address,
+                    "core.bgp_asn": self.config.bgp_asn,
+                    "core.bgp_routerid": self._bgp_address,
+                }
+            )
+            ports.append(ops.Port("tcp", bgp_port))
+
+        self.unit.set_ports(*ports)
 
         if incus.is_clustered() and self.config.set_failure_domain:
             self._set_failure_domain()
@@ -978,6 +1000,14 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         if cluster_binding and cluster_binding.network.bind_address:
             cluster_address = str(cluster_binding.network.bind_address)
         return f"{cluster_address}:{cluster_port}"
+
+    @property
+    def _bgp_address(self) -> str:
+        bgp_address = ""
+        bgp_binding = self.model.get_binding("bgp")
+        if bgp_binding and bgp_binding.network.bind_address:
+            bgp_address = str(bgp_binding.network.bind_address)
+        return bgp_address
 
     @property
     def _node_name(self) -> str:

@@ -649,3 +649,116 @@ def test_config_changed_auth():
                 )
             ]
         )
+
+
+def test_config_changed_bgp_enabled():
+    """Test the config-changed event when bgp is enabled.
+
+    The unit should set the config options in Incus.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", return_value=False),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
+        patch("charm.incus.set_config") as set_config,
+        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.get_cluster_member_info"),
+    ):
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            local_app_data={
+                "tokens": "{}",
+                "created-storage": "[]",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            leader=True,
+            relations={cluster_relation},
+            config={
+                "enable-bgp": True,
+                "bgp-asn": 1234,
+            },
+            networks=[
+                scenario.Network(
+                    binding_name="bgp",
+                    bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.1")])],
+                ),
+            ],
+        )
+
+        out = ctx.run(ctx.on.config_changed(), state)
+
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+            scenario.MaintenanceStatus("Changing config"),
+        ]
+        set_config.assert_has_calls(
+            [
+                call(
+                    {
+                        "core.bgp_address": "10.0.0.1:179",
+                        "core.bgp_asn": 1234,
+                        "core.bgp_routerid": "10.0.0.1",
+                    }
+                )
+            ]
+        )
+        assert scenario.TCPPort(179) in out.opened_ports
+
+
+def test_config_changed_bgp_disabled():
+    """Test the config-changed event when bgp is disabled.
+
+    The unit should not set the config options in Incus.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", return_value=False),
+        patch("charm.IncusCharm._install_packages"),
+        patch("charm.IncusCharm._uninstall_packages"),
+        patch("charm.incus.set_config") as set_config,
+        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.get_cluster_member_info"),
+    ):
+        cluster_relation = scenario.PeerRelation(
+            endpoint="cluster",
+            local_app_data={
+                "tokens": "{}",
+                "created-storage": "[]",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        ctx = scenario.Context(IncusCharm)
+        state = scenario.State(
+            leader=True,
+            relations={cluster_relation},
+            config={
+                "enable-bgp": False,
+                "bgp-asn": 1234,
+            },
+            networks=[
+                scenario.Network(
+                    binding_name="bgp",
+                    bind_addresses=[scenario.BindAddress([scenario.Address("10.0.0.1")])],
+                ),
+            ],
+        )
+
+        out = ctx.run(ctx.on.config_changed(), state)
+
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+            scenario.MaintenanceStatus("Changing config"),
+        ]
+        assert (
+            call(
+                {
+                    "core.bgp_address": "10.0.0.1:179",
+                    "core.bgp_asn": 1234,
+                    "core.bgp_routerid": "10.0.0.1",
+                }
+            )
+            not in set_config.calls
+        )
+        assert scenario.TCPPort(179) not in out.opened_ports
