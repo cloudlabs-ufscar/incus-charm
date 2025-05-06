@@ -209,6 +209,13 @@ config:
         For more information about supported values, refer to the Incus documentation:
         https://linuxcontainers.org/incus/docs/main/reference/network_ovn/
       type: string
+    extra-config:
+      description: |
+        A space separated list of key value pairs in the form key=value to be set on Incus.
+
+        For more information about supported values, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/server_config/
+      type: string
 
 actions:
   add-trusted-certificate:

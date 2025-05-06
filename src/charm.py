@@ -9,7 +9,7 @@ import json
 import logging
 import os
 import socket
-from typing import Any, Dict, List, Literal, Optional, Set, Union, cast
+from typing import Any, Dict, List, Literal, Mapping, Optional, Set, Union, cast
 
 import charmhelpers.contrib.storage.linux.ceph as ceph_client
 import charms.data_platform_libs.v0.data_models as data_models
@@ -79,8 +79,9 @@ class IncusConfig(data_models.BaseConfigModel):
     openfga_store_id: Optional[str] = None
     ovn_uplink_network_type: Literal["physical", "bridge"]
     ovn_uplink_network_parent_interface: Optional[str] = None
-    ovn_uplink_network_config: Optional[Dict[str, Optional[str]]] = None
-    ovn_network_config: Optional[Dict[str, Optional[str]]] = None
+    ovn_uplink_network_config: Optional[Dict[str, str]] = None
+    ovn_network_config: Optional[Dict[str, str]] = None
+    extra_config: Optional[Dict[str, str]] = None
 
     @validator("server_port", "cluster_port", "metrics_port")
     @classmethod
@@ -91,12 +92,12 @@ class IncusConfig(data_models.BaseConfigModel):
             raise ValueError("A port value should be an integer between 0 and 65535")
         return port
 
-    @validator("ovn_uplink_network_config", "ovn_network_config", pre=True)
+    @validator("ovn_uplink_network_config", "ovn_network_config", "extra_config", pre=True)
     @classmethod
     def parse_key_pairs(cls, value):
         """Parse a space separated string of key-value pairs (e.g. `"key1=value key2=another-value"`) into a dictionary."""
         if isinstance(value, str):
-            parsed: Dict[str, Optional[str]] = {}
+            parsed: Dict[str, str] = {}
             for pair in value.strip().split():
                 split = pair.split("=")
                 if len(split) != 2:
@@ -368,6 +369,8 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
                 "openfga.store.id": self.config.openfga_store_id,
             }
         )
+        if self.config.extra_config:
+            incus.set_config(self.config.extra_config)
 
     def on_start(self, event: ops.StartEvent):
         """Handle start event.
@@ -1475,7 +1478,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         )
         logger.info("Uplink network created.")
         logger.info("Will create OVN network using the new uplink network.")
-        ovn_network_config: Dict[str, Optional[str]] = {}
+        ovn_network_config: Mapping[str, Optional[str]] = {}
         if self.config.ovn_network_config:
             if "network" in self.config.ovn_network_config:
                 logger.warning(
