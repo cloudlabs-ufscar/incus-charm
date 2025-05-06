@@ -255,6 +255,13 @@ config:
         When this option is not specified, a loop device or directory on the root disk will be created for
         the storage pool, depending on the driver specified by `local-storage-pool-driver`.
       type: string
+    extra-config:
+      description: |
+        A space separated list of key value pairs in the form key=value to be set on Incus.
+
+        For more information about supported values, refer to the Incus documentation:
+        https://linuxcontainers.org/incus/docs/main/server_config/
+      type: string
 
 actions:
   add-trusted-certificate:
