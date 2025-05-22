@@ -64,7 +64,7 @@ jobs:
   integration:
     name: Integration test
     runs-on: [ubuntu, incus, integration-tests]
-    timeout-minutes: 180
+    timeout-minutes: 200
     needs: [lint, unit, static]
     steps:
       - name: Checkout
