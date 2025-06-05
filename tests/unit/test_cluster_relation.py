@@ -1130,3 +1130,56 @@ def test_cluster_relation_changed_non_leader_ovn_network_created_uplink_bridge()
         relation = out.get_relation(relation.id)
         assert "joined-cluster-at" in relation.local_unit_data
         assert "ovn-uplink-interface" not in relation.local_unit_data
+
+
+def test_cluster_relation_departed_leader_clustered():
+    """Test the cluster-relation-departed event on leader units that are clustered.
+
+    The unit should remove the secret that holds the departing unit join token from
+    the model and remove the secret id from the relation data.
+    """
+    with (
+        patch("charm.IncusCharm._package_installed", return_value=True),
+        patch("charm.IncusCharm._node_name", "any-node-name"),
+        patch("charm.incus.is_clustered", return_value=True),
+        patch("charm.incus.get_cluster_member_info"),
+    ):
+        ctx = scenario.Context(IncusCharm)
+        relation = scenario.PeerRelation(
+            endpoint="cluster",
+            interface="incus-cluster",
+            peers_data={2: {"node-name": "another-node-name"}},
+            local_app_data={
+                "tokens": '{"any-node-name": "any-join-token-secret-id", "another-node-name": "another-join-token-secret-id"}',
+                "created-storage": "[]",
+                "created-network": "[]",
+                "cluster-certificate": "any-cluster-certificate",
+            },
+        )
+        token_secret = scenario.Secret(
+            id="any-join-token-secret-id", tracked_content={"token": "any-token"}, owner="app"
+        )
+        another_token_secret = scenario.Secret(
+            id="another-join-token-secret-id",
+            tracked_content={"token": "another-token"},
+            owner="app",
+        )
+        state = scenario.State(
+            leader=True,
+            relations={relation},
+            secrets=[token_secret, another_token_secret],
+        )
+
+        out = ctx.run(ctx.on.relation_departed(relation=relation, remote_unit=1), state)
+
+        relation = out.get_relation(relation.id)
+
+        assert token_secret not in out.secrets
+        assert another_token_secret in out.secrets
+        assert relation.local_app_data["tokens"] == json.dumps(
+            {"another-node-name": "another-join-token-secret-id"}
+        )
+        assert ctx.unit_status_history == [
+            scenario.UnknownStatus(),
+            scenario.MaintenanceStatus("Removing join token for any-node-name"),
+        ]

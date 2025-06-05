@@ -226,6 +226,7 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
         framework.observe(self.on.stop, self.on_stop)
         framework.observe(self.on.cluster_relation_joined, self.on_cluster_relation_joined)
         framework.observe(self.on.cluster_relation_changed, self.on_cluster_relation_changed)
+        framework.observe(self.on.cluster_relation_departed, self.on_cluster_relation_departed)
         framework.observe(
             self.tls_certificates.on.certificate_changed, self.on_certificate_changed
         )
@@ -586,6 +587,66 @@ class IncusCharm(data_models.TypedCharmBase[IncusConfig]):
             event.relation.data[self.unit]["joined-cluster-at"] = datetime.datetime.now(
                 datetime.timezone.utc
             ).isoformat()
+
+    def on_cluster_relation_departed(self, event: ops.RelationDepartedEvent):
+        """Handle cluster-relation-departed event.
+
+        The leader unit initializes removes the join token for the departing unit
+        from the application data bag.
+        """
+        if not self.unit.is_leader() or not incus.is_clustered():
+            return
+
+        try:
+            cluster_relation = event.relation
+            app_data = cast(ClusterAppData, ClusterAppData.read(cluster_relation.data[self.app]))
+            tokens = app_data.tokens
+
+            # Get the node names of all remaining units
+            remaining_node_names = set()
+            for unit in {*cluster_relation.units, self.unit}:
+                if unit.name == event.unit.name:
+                    continue
+                try:
+                    unit_data = cast(
+                        ClusterUnitData, ClusterUnitData.read(cluster_relation.data[unit])
+                    )
+                    remaining_node_names.add(unit_data.node_name)
+                except ValidationError as error:
+                    logger.debug(
+                        "Could not validate unit data when handling cluster departure. unit=%s error=%s",
+                        unit,
+                        error,
+                    )
+                    continue
+
+            # Remove the secrets for all units that are not part of the relation
+            for node_name, secret_id in tokens.copy().items():
+                if node_name in remaining_node_names:
+                    continue
+
+                self.unit.status = ops.MaintenanceStatus(f"Removing join token for {node_name}")
+                secret = self.model.get_secret(id=secret_id)
+                secret.remove_all_revisions()
+                logger.info(
+                    "Removed join token secret for departing unit. secret_id=%s node_name=%s",
+                    secret_id,
+                    node_name,
+                )
+
+                app_data.tokens.pop(node_name)
+                event.relation.data[event.app]["tokens"] = json.dumps(app_data.tokens)
+                logger.info(
+                    "Removed departed unit join token secret id from application data. secret_id=%s node_name=%s",
+                    secret_id,
+                    node_name,
+                )
+        except ValidationError as error:
+            logger.debug(
+                "Could not validate application data when handling cluster departure. Deferring the event. error=%s",
+                error,
+            )
+            return event.defer()
 
     @property
     def _joined_cluster(self) -> bool:
