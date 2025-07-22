@@ -369,8 +369,8 @@ def test_cluster_relation_changed_non_leader_not_clustered():
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={
-                0: {"node-name": "leader-node-name"},
-                1: {"node-name": "any-node-name"},
+                1: {"node-name": "leader-node-name"},
+                2: {"node-name": "any-node-name"},
             },
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
@@ -437,8 +437,8 @@ def test_cluster_relation_changed_non_leader_not_clustered_failure_domain():
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={
-                0: {"node-name": "leader-node-name"},
-                1: {"node-name": "any-node-name"},
+                1: {"node-name": "leader-node-name"},
+                2: {"node-name": "any-node-name"},
             },
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
@@ -511,8 +511,8 @@ def test_cluster_relation_changed_non_leader_not_clustered_failure_domain_disabl
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={
-                0: {"node-name": "leader-node-name"},
-                1: {"node-name": "any-node-name"},
+                1: {"node-name": "leader-node-name"},
+                2: {"node-name": "any-node-name"},
             },
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
@@ -578,8 +578,8 @@ def test_cluster_relation_changed_non_leader_clustered():
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={
-                0: {"node-name": "leader-node-name"},
-                1: {"node-name": "any-node-name"},
+                1: {"node-name": "leader-node-name"},
+                2: {"node-name": "any-node-name"},
             },
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
@@ -615,8 +615,8 @@ def test_cluster_relation_changed_non_leader_not_clustered_no_token():
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={
-                0: {"node-name": "leader-node-name"},
-                1: {"node-name": "any-node-name"},
+                1: {"node-name": "leader-node-name"},
+                2: {"node-name": "any-node-name"},
             },
             local_app_data={
                 "tokens": "{}",
@@ -652,8 +652,8 @@ def test_cluster_relation_changed_non_leader_certificate_not_applied():
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={
-                0: {"node-name": "leader-node-name"},
-                1: {"node-name": "any-node-name"},
+                1: {"node-name": "leader-node-name"},
+                2: {"node-name": "any-node-name"},
             },
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
@@ -704,8 +704,8 @@ def test_cluster_relation_changed_non_leader_ceph_not_configured():
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={
-                0: {"node-name": "leader-node-name"},
-                1: {"node-name": "any-node-name"},
+                1: {"node-name": "leader-node-name"},
+                2: {"node-name": "any-node-name"},
             },
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
@@ -758,8 +758,8 @@ def test_cluster_relation_changed_non_leader_ceph_pool_not_created():
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={
-                0: {"node-name": "leader-node-name"},
-                1: {"node-name": "any-node-name"},
+                1: {"node-name": "leader-node-name"},
+                2: {"node-name": "any-node-name"},
             },
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
@@ -813,8 +813,8 @@ def test_cluster_relation_changed_non_leader_ceph_pool_created():
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={
-                0: {"node-name": "leader-node-name"},
-                1: {"node-name": "any-node-name"},
+                1: {"node-name": "leader-node-name"},
+                2: {"node-name": "any-node-name"},
             },
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
@@ -876,8 +876,8 @@ def test_cluster_relation_changed_non_leader_ovn_not_ready():
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={
-                0: {"node-name": "leader-node-name"},
-                1: {"node-name": "any-node-name"},
+                1: {"node-name": "leader-node-name"},
+                2: {"node-name": "any-node-name"},
             },
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
@@ -931,8 +931,8 @@ def test_cluster_relation_changed_non_leader_ovn_ready():
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={
-                0: {"node-name": "leader-node-name"},
-                1: {"node-name": "any-node-name"},
+                1: {"node-name": "leader-node-name"},
+                2: {"node-name": "any-node-name"},
             },
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
@@ -997,8 +997,8 @@ def test_cluster_relation_changed_non_leader_ovn_network_created_uplink_physical
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={
-                0: {"node-name": "leader-node-name"},
-                1: {"node-name": "any-node-name"},
+                1: {"node-name": "leader-node-name"},
+                2: {"node-name": "any-node-name"},
             },
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
@@ -1078,8 +1078,8 @@ def test_cluster_relation_changed_non_leader_ovn_network_created_uplink_bridge()
             endpoint="cluster",
             interface="incus-cluster",
             peers_data={
-                0: {"node-name": "leader-node-name"},
-                1: {"node-name": "any-node-name"},
+                1: {"node-name": "leader-node-name"},
+                2: {"node-name": "any-node-name"},
             },
             local_app_data={
                 "tokens": '{"any-node-name": "any-join-token-secret-id"}',
