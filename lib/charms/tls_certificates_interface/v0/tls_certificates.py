@@ -152,7 +152,9 @@ class TLSCertificatesRequires(Object):
         certificates: Set[Certificate] = set()
         unit_name = self._unit_name
         for unit in relation.units:
-            unit_data = relation.data[unit]
+            unit_data = relation.data.get(unit)
+            if unit_data is None:
+                continue
             ca = unit_data.get("ca")
             cert = unit_data.get(f"{unit_name}.server.cert")
             key = unit_data.get(f"{unit_name}.server.key")
