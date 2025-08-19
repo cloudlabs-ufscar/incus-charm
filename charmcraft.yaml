@@ -43,13 +43,10 @@ description: |
 
 
 # (Required for 'charm' type)
-bases:
-  - build-on:
-    - name: ubuntu
-      channel: "22.04"
-    run-on:
-    - name: ubuntu
-      channel: "22.04"
+platforms:
+  ubuntu-24.04-amd64:
+    build-on: [ubuntu@24.04:amd64]
+    build-for: [ubuntu@24.04:amd64]
 
 assumes:
   - juju >= 3.5.0
@@ -97,7 +94,7 @@ config:
 
         A complete reference for the format of the source list entry
         is available at https://wiki.debian.org/SourcesList.
-      default: deb https://pkgs.zabbly.com/incus/stable jammy main
+      default: deb https://pkgs.zabbly.com/incus/stable noble main
       type: string
     package-repository-gpg-key:
       description: |

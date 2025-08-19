@@ -35,7 +35,7 @@ def test_install(leader, is_clustered):
 
         assert out.workload_version == "any-version"
         add_apt_repository.assert_called_once_with(
-            repository_line="deb https://pkgs.zabbly.com/incus/stable jammy main",
+            repository_line="deb https://pkgs.zabbly.com/incus/stable noble main",
             gpg_key_url="https://pkgs.zabbly.com/key.asc",
         )
         install_packages.assert_called_once_with("incus")
@@ -72,7 +72,7 @@ def test_install_with_ceph_relation(leader, is_clustered):
 
         assert out.workload_version == "any-version"
         add_apt_repository.assert_called_once_with(
-            repository_line="deb https://pkgs.zabbly.com/incus/stable jammy main",
+            repository_line="deb https://pkgs.zabbly.com/incus/stable noble main",
             gpg_key_url="https://pkgs.zabbly.com/key.asc",
         )
         install_packages.assert_called_once_with("incus", "ceph-common")
@@ -108,7 +108,7 @@ def test_install_with_web_ui_enabled(leader, is_clustered):
 
         assert out.workload_version == "any-version"
         add_apt_repository.assert_called_once_with(
-            repository_line="deb https://pkgs.zabbly.com/incus/stable jammy main",
+            repository_line="deb https://pkgs.zabbly.com/incus/stable noble main",
             gpg_key_url="https://pkgs.zabbly.com/key.asc",
         )
         install_packages.assert_called_once_with("incus", "incus-ui-canonical")
@@ -151,7 +151,7 @@ def test_install_with_local_storage(leader, is_clustered, storage_driver, expect
 
         assert out.workload_version == "any-version"
         add_apt_repository.assert_called_once_with(
-            repository_line="deb https://pkgs.zabbly.com/incus/stable jammy main",
+            repository_line="deb https://pkgs.zabbly.com/incus/stable noble main",
             gpg_key_url="https://pkgs.zabbly.com/key.asc",
         )
         if expected_package:

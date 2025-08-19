@@ -1,7 +1,7 @@
 # This is an integration test bundle template. The bundle is meant to be deployed
 # on an LXD cloud capable of provisioning VMs.
 
-default-base: ubuntu@22.04/stable
+default-base: ubuntu@24.04/stable
 
 applications:
   incus:
@@ -17,7 +17,7 @@ applications:
       local-storage-pool-config: volume.zfs.remove_snapshots=true zfs.pool_name=any-pool-name size=1GiB
   vault:
     charm: vault
-    channel: 1.8/stable
+    channel: latest/edge
     num_units: 1
     to:
       - lxd:0
