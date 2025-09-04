@@ -316,7 +316,7 @@ async def test_create_instance(ops_test: OpsTest):
     unit = application.units[0]
     target_node = ops_test.model.units["incus/1"].machine.hostname
     action = await unit.run(
-        f"incus launch images:ubuntu/22.04 {TEST_INSTANCE_NAME} --vm --quiet --target {target_node}"
+        f"incus launch images:ubuntu/24.04 {TEST_INSTANCE_NAME} --vm --quiet --target {target_node}"
     )
     await action.fetch_output()
     assert action.status == "completed", f"Action not completed: {action.results}"
