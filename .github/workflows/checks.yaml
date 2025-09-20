@@ -40,6 +40,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install python dependencies
+        run: sudo apt install build-essential libssl-dev libffi-dev python3-dev -y
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.19"
+      - name: Install tox
+        run: uv tool install tox
       - name: Run linters
         run: uvx tox run -e lint
   unit:
@@ -49,6 +57,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install python dependencies
+        run: sudo apt install build-essential libssl-dev libffi-dev python3-dev -y
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.19"
+      - name: Install tox
+        run: uv tool install tox
       - name: Run unit tests
         run: uvx tox run -e unit
   static:
@@ -58,6 +74,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install python dependencies
+        run: sudo apt install build-essential libssl-dev libffi-dev python3-dev -y
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.19"
+      - name: Install tox
+        run: uv tool install tox
       - name: Run static type checking
         run: uvx tox run -e static
 
@@ -69,6 +93,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install host dependencies
+        run: sudo apt install build-essential libssl-dev libffi-dev python3-dev iptables -y
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.19"
+      - name: Install tox
+        run: uv tool install tox
+      - name: Install snap
+        run: sudo apt install snapd -y
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: lxd
+          bootstrap-constraints: cores=2 mem=2G virt-type=virtual-machine
       - name: Pack charm
         id: pack
         # NOTE: since our runners are ephemeral, we can use the --destructive-mode
@@ -78,10 +117,5 @@ jobs:
         run: sudo charmcraft pack --destructive-mode
       - name: Move charm to directory
         run: mkdir -p charm && mv *.charm charm
-      - name: Setup operator environment
-        uses: charmed-kubernetes/actions-operator@main
-        with:
-          provider: lxd
-          bootstrap-constraints: cores=2 mem=2G virt-type=virtual-machine
       - name: Run integration tests
         run: uvx tox run -e integration
