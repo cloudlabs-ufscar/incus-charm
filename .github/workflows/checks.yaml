@@ -20,10 +20,10 @@ on:
       - lib/**
       - src/**
       - tests/**
-  # NOTE: run the workflow every friday at midnight to catch breaking
+  # NOTE: run the workflow every monday at midnight to catch breaking
   # changes in both the environment and external dependencies
   schedule:
-    - cron: '0 0 * * 5'
+    - cron: '0 0 * * 1'
 
 permissions:
   contents: read
