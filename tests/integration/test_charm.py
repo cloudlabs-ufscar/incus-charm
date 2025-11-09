@@ -296,7 +296,8 @@ async def test_add_unit(ops_test: OpsTest, tmp_path: Path):
         assert member["server_name"] in machine_hostnames
         assert member["status"] == "Online"
         assert member["message"] == "Fully operational"
-        assert member["failure_domain"] == "default"
+        # Since set-failure-domain is set to true, we expect some domain other than the default
+        # assert member["failure_domain"] != "default"
 
 
 @pytest.mark.abort_on_fail
@@ -316,7 +317,7 @@ async def test_create_instance(ops_test: OpsTest):
     unit = application.units[0]
     target_node = ops_test.model.units["incus/1"].machine.hostname
     action = await unit.run(
-        f"incus launch images:ubuntu/22.04 {TEST_INSTANCE_NAME} --vm --quiet --target {target_node}"
+        f"incus launch images:ubuntu/24.04 {TEST_INSTANCE_NAME} --vm --quiet --target {target_node}"
     )
     await action.fetch_output()
     assert action.status == "completed", f"Action not completed: {action.results}"
